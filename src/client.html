@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+        <script type="text/javascript">
+		function printTime() {
+    			var d = new Date();
+			$('div').append($('<p>', { text: d.toLocaleTimeString() }));
+		}
+            $(function() {
+                window.WebSocket = window.WebSocket || window.MozWebSocket;
+
+                var websocket = new WebSocket('ws://websockettest-smallgame.rhcloud.com:8000');
+		var mytimer = setInterval(function () {printTime()}, 1000);
+                $('div').append($('<p>', { text: "connecting" }));
+                websocket.onopen = function () {
+		    clearInterval(mytimer);
+                    $('h1').css('color', 'green');
+                    $('div').append($('<p>', { text: "connect success." }));
+                };
+
+                websocket.onerror = function () {
+		    clearInterval(mytimer);
+                    $('h1').css('color', 'red');
+                    $('div').append($('<p>', { text: "connect fail!!!" }));
+                };
+
+                websocket.onmessage = function (message) {
+                    console.log(message.data);
+                    $('div').append($('<p>', { text: message.data }));
+                };
+                
+
+                $('button').click(function(e) {
+                    e.preventDefault();
+                    websocket.send($('input').val());
+                    $('input').val('');
+                });
+            });
+        </script>
+        </head>
+    <body>
+        <h1>WebSockets test</h1>
+        <form>
+            <input type="text" />
+            <button>Send</button>
+        </form>
+        <div></div>
+    </body>
+</html>
