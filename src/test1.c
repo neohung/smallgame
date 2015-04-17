@@ -1,131 +1,4 @@
-#ifdef WIN32
-#include <windows.h>
-#else
-#include <signal.h>
-#endif
-
-#ifndef WIN32
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif /* WIN32 */
-
-#include <stdlib.h>
-#include <errno.h>
-#include <gtk/gtk.h>
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
-
-#define CLIENT_TYPES_H
-#define HAVE_CURL_CURL_H
-
-#ifdef HAVE_CURL_CURL_H
-#include <curl/curl.h>
-#include <curl/easy.h>
-#endif
-
-static GdkPixmap *neo;
-
-GtkWidget *window_root, *magic_map;
-GtkBuilder *dialog_xml, *window_xml;
-GdkGC *mapgc;
-
-typedef unsigned long uint64;
-typedef signed long sint64;
-typedef unsigned int uint32;
-typedef signed int sint32;
-typedef unsigned short uint16;
-typedef signed short sint16;
-typedef unsigned char uint8;
-typedef signed char sint8;
-
-typedef struct PixmapInfo {
-    void        *icon_mask, *icon_image;
-    uint16      icon_width, icon_height;
-    void        *map_mask, *map_image;
-    uint16      map_width, map_height;
-    void        *fog_image;
-    uint16      smooth_face;
-#ifdef HAVE_OPENGL
-    //GLuint      map_texture, fog_texture;
-#endif
-} PixmapInfo;
-
-#define MAXPIXMAPNUM 10000
-static PixmapInfo *pixmaps[MAXPIXMAPNUM];
-
-GdkColor root_color[13];
-const char *const colorname[13] = {
-    "Black",                /* 0  */
-    "White",                /* 1  */
-    "Navy",                 /* 2  */
-    "Red",                  /* 3  */
-    "Orange",               /* 4  */
-    "DodgerBlue",           /* 5  */
-    "DarkOrange2",          /* 6  */
-    "SeaGreen",             /* 7  */
-    "DarkSeaGreen",         /* 8  *//* Used for window background color */
-    "Grey50",               /* 9  */
-    "Sienna",               /* 10 */
-    "Gold",                 /* 11 */
-    "Khaki"                 /* 12 */
-};
-
-
-struct MapCellLayer {
-    sint16 face;
-    sint8 size_x;
-    sint8 size_y;
-
-    /* Link into animation information.
-     * animation is provided to us from the server in the map2 command.
-     * animation_speed is also provided.
-     * animation_left is how many ticks until animation changes - generated
-     *  by client.
-     * animation_phase is current phase.
-     */
-    sint16  animation;
-    uint8   animation_speed;
-    uint8   animation_left;
-    uint8   animation_phase;
-};
-
-struct MapCell
-{
-    struct MapCellLayer heads[3];
-    struct MapCellLayer tails[3];
-    uint16 smooth[3];
-    uint8 darkness;         /* darkness: 0=fully illuminated, 255=pitch black */
-    uint8 need_update:1;    /* set if tile should be redrawn */
-    uint8 have_darkness:1;  /* set if darkness information was set */
-    uint8 need_resmooth:1;  /* same has need update but for smoothing only */
-    uint8 cleared:1;        /* If set, this is a fog cell. */
-};
-
-struct Map
-{
-    int x;
-    int y;
-    struct MapCell **cells;
-};
-
-struct Map the_map;
-
-typedef struct Cache_Entry {
-    char    *filename;
-    uint32  checksum;
-    uint32  ispublic:1;
-    void    *image_data;
-    struct Cache_Entry  *next;
-} Cache_Entry;
-
-struct Image_Cache {
-    char    *image_name;
-    struct Cache_Entry  *cache_entry;
-} image_cache[8192];
+#include "test1.h"
 
 void error_dialog(char *description, char *information) {
     GtkWidget *dialog;
@@ -216,19 +89,35 @@ static void init_ui() {
  
 }
 
+void inventory_tick(void)
+{
+    //animate_inventory();
+    //animate_look();
+}
+
+void mapdata_animation(void)
+{
+    int x, y, layer, face;
+    struct MapCellLayer *cell;
+    //
+}
+
 int do_timeout() {
-/*
+
     if (cpl.showmagic) {
-        magic_map_flash_pos();
+        printf("cpl.showmagic\n");
+        //magic_map_flash_pos();
     }
     if (cpl.spells_updated) {
-        update_spell_information();
+        printf("cpl.spells_updated\n");
+        //update_spell_information();
     }
     if (!tick) {
+        //printf("!tick\n");
         inventory_tick();
         mapdata_animation();
     }
-    */
+    
     return TRUE;
 }
 
@@ -241,27 +130,6 @@ void event_loop() {
 #endif
     gtk_main();
 }
-
-typedef struct PlayerPosition {
-  int x;
-  int y;
-} PlayerPosition;
-PlayerPosition pl_pos;
-
-int width, height;
-
-#define CLEAR_CELLS(x, y, len_y) \
-do { \
-    int clear_cells_i, j; \
-    memset(&the_map.cells[(x)][(y)], 0, sizeof(the_map.cells[(x)][(y)])*(len_y)); \
-    for (clear_cells_i = 0; clear_cells_i < (len_y); clear_cells_i++) \
-    { \
-        for (j=0; j < 3; j++) { \
-            the_map.cells[(x)][(y)+clear_cells_i].heads[j].size_x = 1; \
-            the_map.cells[(x)][(y)+clear_cells_i].heads[j].size_y = 1; \
-        } \
-    } \
-} while(0)
 
 sint16 mapdata_face(int x, int y, int layer)
 {
@@ -310,10 +178,6 @@ void mapdata_init(void)
         CLEAR_CELLS(x, 0, 512);
     }   
 }
-
-GtkWidget *map_drawing_area, *map_notebook;
-static GdkBitmap *dark1, *dark2, *dark3;
-static GdkPixmap *dark;
 
 void draw_splash(void)
 {
@@ -572,297 +436,6 @@ void map_init(GtkWidget *window_root) {
 
 }
 
-#define META_SERVER "crossfire.real-time.com"
-#define META_PORT   13326
-#define METASERVER  FALSE
-#define MAXSOCKBUF (2+65535+1)
-#define MAX_FACE_SETS   20
-
-typedef struct SockList {
-#ifdef CLIENT_TYPES_H                       /* Used by the client */
-    int len;
-    unsigned char *buf;
-#else                                       /* Used by the server */
-    size_t len;
-    unsigned char buf[MAXSOCKBUF]; /* 2(size)+65535(content)+1(ending NULL) */
-#endif
-} SockList;
-
-typedef struct ClientSocket {
-    int fd;
-    SockList    inbuf;
-    int cs_version, sc_version;         /**< Server versions of these
-                                         */
-    int command_sent, command_received; /**< These are used for the newer
-                                         *   'windowing' method of commands -
-                                         *   number of last command sent,
-                                         *   number of received confirmation
-                                         */
-    int command_time;                   /**< Time (in ms) players commands
-                                         *   currently take to execute
-                                         */
-    char* servername;
-} ClientSocket;
-
-#define CS_NUM_SKILLS 50
-#define MAX_BUF 256
-#define MAX_SKILL CS_NUM_SKILLS
-#define FREE_AND_CLEAR(xyz) { free(xyz); xyz=NULL; }
-char *skill_names[MAX_SKILL];
-
-typedef enum Input_State {
-    Playing, Reply_One, Reply_Many, Configure_Keys, Command_Mode,
-    Metaserver_Select
-} Input_State;
-
-typedef enum rangetype {
-  range_bottom = -1, range_none = 0, range_bow = 1, range_magic = 2,
-  range_wand = 3, range_rod = 4, range_scroll = 5, range_horn = 6,
-  range_steal = 7,
-  range_size = 8
-} rangetype;
-
-typedef struct item_struct {
-    struct item_struct *next;   /* next item in inventory */
-    struct item_struct *prev;   /* previous item in inventory */
-    struct item_struct *env;    /* which items inventory is this item */
-    struct item_struct *inv;    /* items inventory */
-    char d_name[128];  /* item's full name w/o status information */
-    char s_name[128];  /* item's singular name as sent to us */
-    char p_name[128];  /* item's plural name as sent to us */
-    char flags[128];   /* item's status information */
-    sint32 tag;         /* item identifier (0 = free) */
-    uint32 nrof;        /* number of items */
-    float weight;       /* how much item weights */
-    sint16 face;        /* index for face array */
-    uint16 animation_id;    /* Index into animation array */
-    uint8 anim_speed;       /* how often to animate */
-    uint8 anim_state;       /* last face in sequence drawn */
-    uint16 last_anim;       /* how many ticks have passed since we last animated */
-    uint16 magical:1;       /* item is magical */
-    uint16 cursed:1;        /* item is cursed */
-    uint16 damned:1;        /* item is damned */
-    uint16 unpaid:1;        /* item is unpaid */
-    uint16 locked:1;        /* item is locked */
-    uint16 applied:1;       /* item is applied */
-    uint16 open:1;      /* container is open */
-    uint16 was_open:1;      /* container was open */
-    uint16 inv_updated:1;   /* item's inventory is updated, this is set
-                   when item's inventory is modified, draw
-                   routines can use this to redraw things */
-    uint8 apply_type;       /* how item is applied (worn/wield/etc) */
-    uint32 flagsval;        /* unmodified flags value as sent from the server*/
-    uint16   type;      /* Item type for ordering */
-} item;
-
-typedef struct Spell_struct {
-    struct Spell_struct *next;
-    char name[256];                     /**< One length byte plus data       */
-    char message[10000];                /**< This is huge, the packets can't
-                                         *   be much bigger than this anyway */
-    uint32 tag;                         /**< Unique ID number for a spell so
-                                         *   updspell etc can operate on it. */
-    uint16 level;                       /**< The casting level of the spell. */
-    uint16 time;                        /**< Casting time in server ticks.   */
-    uint16 sp;                          /**< Mana per cast; may be zero.     */
-    uint16 grace;                       /**< Grace per cast; may be zero.    */
-    uint16 dam;                         /**< Damage done by spell though the
-                                         *   meaning is spell dependent and
-                                         *   actual damage may depend on how
-                                         *   the spell works.                */
-    uint8 skill_number;                 /**< The index in the skill arrays,
-                                         *   plus CS_STAT_SKILLINFO. 0: no
-                                         *   skill used for cast.  See also:
-                                         *   request_info skill_info         */
-    char *skill;                        /**< Pointer to the skill name,
-                                         *   derived from the skill number.  */
-    uint32 path;                        /**< The bitmask of paths this spell
-                                         *   belongs to.  See request_info
-                                         *   spell_paths and stats about
-                                         *   attunement, repulsion, etc.     */
-    sint32 face;                        /**< A face ID that may be used to
-                                         *   show a graphic representation
-                                         *   of the spell.                   */
-    uint8 usage;                        /**< Spellmon 2 data.  Values are:
-                                         *   0: No argument required.
-                                         *   1: Requires other spell name.
-                                         *   2: Freeform string is optional.
-                                         *   3: Freeform string is required. */
-    char requirements[256];             /**< Spellmon 2 data. One length byte
-                                         *   plus data. If the spell requires
-                                         *   items to be cast, this is a list
-                                         *   of req'd items. Comma-separated,
-                                         *   number of items, singular names
-                                         *   (like ingredients for alchemy). */
-} Spell;
-
-typedef struct Stat_struct {
-    sint8 Str;                          /**< Strength */
-    sint8 Dex;                          /**< Dexterity */
-    sint8 Con;                          /**< Constitution */
-    sint8 Wis;                          /**< Wisdom */
-    sint8 Cha;                          /**< Charisma */
-    sint8 Int;                          /**< Intelligence */
-    sint8 Pow;                          /**< Power */
-    sint8 wc;                           /**< Weapon Class */
-    sint8 ac;                           /**< Armour Class */
-    sint8 level;                        /**< Experience level */
-    sint16 hp;                          /**< Hit Points */
-    sint16 maxhp;                       /**< Maximum hit points */
-    sint16 sp;                          /**< Spell points for casting spells */
-    sint16 maxsp;                       /**< Maximum spell points. */
-    sint16 grace;                       /**< Spell points for using prayers. */
-    sint16 maxgrace;                    /**< Maximum spell points. */
-    sint64 exp;                         /**< Experience.  Killers gain 1/10. */
-    sint16 food;                        /**< Quantity food in stomach.
-                                         *   0 = starved.
-                                         */
-    sint16 dam;                         /**< How much damage this object does
-                                         *   for each hit
-                                         */
-    sint32 speed;                       /**< Speed (is displayed as a float) */
-    sint32 weapon_sp;                   /**< Weapon speed (displayed in client
-                                         *   as a float)
-                                         */
-    uint32 attuned;                     /**< Spell paths to which the player is
-                                         *   attuned
-                                         */
-    uint32 repelled;                    /**< Spell paths to which the player is
-                                         *   repelled
-                                         */
-    uint32 denied;                      /**< Spell paths denied to the player*/
-    uint16 flags;                       /**< Contains fire on/run on flags */
-    sint16 resists[30];                 /**< Resistant values */
-    uint32 resist_change:1;             /**< Resistant value change flag */
-    sint16 skill_level[MAX_SKILL];      /**< Level of known skills */
-    sint64 skill_exp[MAX_SKILL];        /**< Experience points for skills */
-    uint32 weight_limit;                /**< Carrying weight limit */
-} Stats;
-
-
-typedef struct Player_Struct {
-    item        *ob;                    /**< Player object */
-    item        *below;                 /**< Items below the player
-                                         *   (pl.below->inv) */
-    item        *container;             /**< open container */
-    uint16      count_left;             /**< count for commands */
-    Input_State input_state;            /**< What the input state is */
-    char        last_command[MAX_BUF];  /**< Last command entered */
-    char        input_text[MAX_BUF];    /**< keys typed (for long commands) */
-    item        *ranges[range_size];    /**< Object that is used for that */
-                                        /**< range type */
-    uint8       ready_spell;            /**< Index to spell that is readied */
-    char        spells[255][40];        /**< List of all the spells the */
-                                        /**< player knows */
-    Stats       stats;                  /**< Player stats */
-    Spell       *spelldata;             /**< List of spells known */
-    char        title[MAX_BUF];         /**< Title of character */
-    char        range[MAX_BUF];         /**< Range attack chosen */
-    uint32      spells_updated;         /**< Whether or not spells updated */
-    uint32      fire_on:1;              /**< True if fire key is pressed */
-    uint32      run_on:1;               /**< True if run key is on */
-    uint32      meta_on:1;              /**< True if fire key is pressed */
-    uint32      alt_on:1;               /**< True if fire key is pressed */
-    uint32      no_echo:1;              /**< If TRUE, don't echo keystrokes */
-    uint32      count;                  /**< Repeat count on command */
-    uint16      mmapx, mmapy;           /**< size of magic map */
-    uint16      pmapx, pmapy;           /**< Where the player is on the magic
-                                         *   map */
-    uint8       *magicmap;              /**< Magic map data */
-    uint8       showmagic;              /**< If 0, show the normal map,
-                                         *   otherwise show the magic map. */
-    uint16      mapxres,mapyres;        /**< Resolution to draw on the magic
-                                         *   map. Only used in client-specific
-                                         *   code, so it should move there. */
-    char        *name;                  /**< Name of PC, set and freed in account.c
-                                         *   play_character() (using data returned
-                                         *   from server to AccountPlayersCmd, via
-                                         *   character_choose window,
-                                         *   OR in
-                                         *   send_create_player_to_server() when
-                                         *   new character created. */
-} Client_Player;
-
-typedef struct FaceSets_struct {
-    uint8   setnum;                     /**<  */
-    uint8   fallback;                   /**<  */
-    char    *prefix;                    /**<  */
-    char    *fullname;                  /**<  */
-    char    *size;                      /**<  */
-    char    *extension;                 /**<  */
-    char    *comment;                   /**<  */
-} FaceSets;
-
-typedef struct Face_Information_struct {
-    uint8   faceset;
-    char    *want_faceset;
-    sint16  num_images;
-    uint32  bmaps_checksum, old_bmaps_checksum;
-    /**
-     * Just for debugging/logging purposes.  This is cleared on each new
-     * server connection.  This may not be 100% precise (as we increment
-     * cache_hits when we find a suitable image to load - if the data is bad,
-     * that would count as both a hit and miss.
-     */
-    sint16  cache_hits, cache_misses;
-    uint8   have_faceset_info;          /**< Simple value to know if there is
-                                         *   data in facesets[].
-                                         */
-    FaceSets    facesets[20];
-} Face_Information;
-
-struct RC_Choice {
-    char *choice_name;                  /* name to respond, eg, race_choice_1 */
-    char *choice_desc;                  /* Longer description of choice */
-    int num_values;                     /* How many values we have */
-    char **value_arch;    /* Array arch names */
-    char **value_desc;    /* Array of description */
-};
-
-typedef struct Race_Class_Info {
-    char    *arch_name;     /* Name of the archetype this correponds to */
-    char    *public_name;   /* Public (human readadable) name */
-    char    *description;   /* Description of the race/class */
-    sint8   stat_adj[7];   /* Adjustment values */
-    int     num_rc_choice;                  /* Size of following array */
-    struct RC_Choice    *rc_choice;         /* array of choices */
-} Race_Class_Info;
-
-typedef struct Starting_Map_Info {
-    char    *arch_name;     /* Name of archetype for this map */
-    char    *public_name;   /* Name of the human readable name */
-    char    *description;   /* Description of this map */
-} Starting_Map_Info;
-
-Client_Player cpl;
-ClientSocket csocket;
-Face_Information face_info;
-char *meta_server=META_SERVER;
-int meta_port=META_PORT;
-int wantloginmethod;
-int maxfd;
-int serverloginmethod;
-
-char *news=NULL, *motd=NULL, *rules=NULL;
-int spellmon_level = 0;                 /**< Keeps track of what spellmon
-                                         *   command is supported by the
-                                         *   server. */
-int num_races = 0;    /* Number of different races server has */
-int used_races = 0;   /* How many races we have filled in */
-int num_classes = 0;  /* Same as race data above, but for classes */
-int used_classes = 0;
-int stat_points = 0;    /* Number of stat points for new characters */
-int stat_min = 0;       /* Minimum stat for new characters */
-int stat_maximum = 0;   /* Maximum stat for new characters */
-int starting_map_number = 0;   /* Number of starting maps */
-Race_Class_Info *races=NULL, *classes=NULL;
-Starting_Map_Info *starting_map_info = NULL;
-/*
-int meta_port=META_PORT, want_skill_exp=0,
-    replyinfo_status=0, requestinfo_sent=0, replyinfo_last_face=0,
-    maxfd,metaserver_on=METASERVER, metaserver2_on=METASERVER2,
-          wantloginmethod=0, serverloginmethod=0;
-*/
 static void sigpipe_handler(int sig) {
     /* ignore that signal for now */
 }
@@ -1017,43 +590,6 @@ void reset_client_vars() {
     serverloginmethod = 0;
 
 }
-
-#define MAX_METASERVER 100
-
-#define MS_SMALL_BUF    60
-#define MS_LARGE_BUF    512
-
-typedef struct Meta_Info {
-    char    ip_addr[MS_SMALL_BUF];  /* MS1 */
-    char    hostname[MS_LARGE_BUF]; /* MS1 & MS2 */
-    int     port;           /* MS2 - port server is on */
-    char    html_comment[MS_LARGE_BUF]; /* MS2 */
-    char    text_comment[MS_LARGE_BUF]; /* MS1 & MS2 - for MS1, presumed */
-                    /* all comments are text */
-    char    archbase[MS_SMALL_BUF]; /* MS2 */
-    char    mapbase[MS_SMALL_BUF];  /* MS2 */
-    char    codebase[MS_SMALL_BUF]; /* MS2 */
-    char    flags[MS_SMALL_BUF];    /* MS2 */
-    int     num_players;        /* MS1 & MS2 */
-    uint32  in_bytes;           /* MS2 */
-    uint32  out_bytes;          /* MS2 */
-    int     idle_time;          /* MS1 - for MS2, calculated from */
-                    /* last_update value */
-    int     uptime;         /* MS2 */
-    char    version[MS_SMALL_BUF];  /* MS1 & MS2 */
-    int     sc_version;         /* MS2 */
-    int     cs_version;         /* MS2 */
-} Meta_Info;
-
-char* server=NULL;
-int need_mapping_update=1;
-int meta_numservers = 0;
-int metaserver_on=METASERVER; //FALSE
-Meta_Info *meta_servers = NULL;
-int ms2_is_running;
-pthread_mutex_t ms2_info_mutex;
-
-static char *metaservers[] = {"http://crossfire.real-time.com/metaserver2/meta_client.php"};
 
 //Fill meta_serversp[]
 size_t metaserver2_writer(void *ptr, size_t size, size_t nmemb, void *data)
@@ -1274,10 +810,127 @@ int metaserver2_get_info(void)
     return 0;
 }
 
-static GtkWidget *metaserver_window, *treeview_metaserver, *metaserver_button,
-       *metaserver_status, *metaserver_entry;
-static GtkListStore *store_metaserver;
-static GtkTreeSelection *metaserver_selection;
+//#define HAVE_GETADDRINFO 1
+int init_connection(char *host, int port)
+{
+    int fd = -1, oldbufsize, newbufsize=65535;
+    socklen_t buflen=sizeof(int);
+    printf("init_connection\n");
+    #if !HAVE_GETADDRINFO || WIN32
+        printf("!HAVE_GETADDRINFO\n");
+        struct sockaddr_in insock;
+        struct protoent *protox;
+
+        protox = getprotobyname("tcp");
+        fd = socket(PF_INET, SOCK_STREAM, protox->p_proto);
+        if (fd==-1) {
+            printf("getaddrinfo fail\n");    
+            return -1;
+        }
+        insock.sin_family = AF_INET;
+        insock.sin_port = htons((unsigned short)port);
+        if (isdigit(*host)) {
+            insock.sin_addr.s_addr = inet_addr(host);
+        } 
+        else {
+            struct hostent *hostbn = gethostbyname(host);
+            if (hostbn == (struct hostent *) NULL) {
+                printf("unknown host\n");  
+                return -1;
+            }
+            memcpy(&insock.sin_addr, hostbn->h_addr, hostbn->h_length);
+        }
+        if (connect(fd,(struct sockaddr *)&insock,sizeof(insock)) == (-1)) {
+            printf("can't connect to server\n"); 
+            return -1;
+        }
+        printf("init_connect step 1\n");
+    #else
+    struct addrinfo hints;
+    struct addrinfo *res = NULL, *ai;
+    char port_str[6];
+    int fd_status, fd_flags, fd_select, fd_sockopt;
+    struct timeval tv;
+    fd_set fdset;
+    //convert port to port_str
+    snprintf(port_str, sizeof(port_str), "%d", port);
+    memset(&hints, 0, sizeof(hints));
+    //fill hints
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    if (getaddrinfo(host, port_str, &hints, &res) != 0) {
+        printf("getaddrinfo fail\n");
+        return -1;
+    }
+    fd_status = 0;
+    //got ai fromm res
+    for (ai = res; ai != NULL; ai = ai->ai_next) {
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd == -1) {
+            printf("create socket fail!!\n");
+            continue;
+        }else{
+            printf("create socket  success!!\n");
+        }
+    }
+    #endif
+    free(csocket.servername);
+    csocket.servername = malloc(sizeof(char)*(strlen(host)+1));
+    strcpy(csocket.servername, host);
+
+    #ifndef WIN32
+        #include <fcntl.h>
+        if (fcntl(fd, F_SETFL, O_NDELAY)==-1) {
+            printf("Error on fcntl.\n");
+        }
+    #else
+    {
+        unsigned long tmp = 1;
+        if (ioctlsocket(fd, FIONBIO, &tmp)<0) {
+            printf("Error on ioctlsocket.\n");
+        }
+    }
+    #endif
+    //Get bufsize to oldbufsize
+   if (getsockopt(fd,SOL_SOCKET,SO_RCVBUF, (char*)&oldbufsize, &buflen)==-1) {
+        oldbufsize=0;
+    }
+    //Get set new bufsize
+    if (oldbufsize<newbufsize) {
+        if(setsockopt(fd,SOL_SOCKET,SO_RCVBUF, (char*)&newbufsize, sizeof(&newbufsize))) {
+            printf("Error to set bufsize, old is %d.\n",oldbufsize);
+            setsockopt(fd,SOL_SOCKET,SO_RCVBUF, (char*)&oldbufsize, sizeof(&oldbufsize));
+        }
+    }
+    printf("init_connect step 2\n");
+    return fd;
+}
+
+
+static void metaserver_connect_to(const char *name) {
+    char buf[256], *next_token = (char *)name, *hostname;
+    int port = 13327;
+    /* Set client status and update GUI before continuing. */
+    snprintf(buf, sizeof(buf), "Connecting to '%s'...", name);
+    gtk_label_set_text(GTK_LABEL(metaserver_status), buf);
+    gtk_main_iteration();
+    hostname = strsep(&next_token, ":");
+    if (next_token != NULL) {
+        port = atoi(next_token);
+    }
+    csocket.fd = init_connection(hostname, port);
+    if (csocket.fd != -1) {
+        printf("[%s:%d] connected\n",hostname,port);
+        //metaserver_update_cache(name, name);
+        gtk_main_quit();
+        cpl.input_state = Playing;
+    } else {
+        snprintf(buf, 255, "Unable to connect to %s!", name);
+        gtk_label_set_text(GTK_LABEL(metaserver_status), buf);
+    }
+
+}
 
 //Mouse click the row twice
 void on_treeview_metaserver_row_activated(GtkTreeView *treeview,
@@ -1291,7 +944,7 @@ void on_treeview_metaserver_row_activated(GtkTreeView *treeview,
     if (gtk_tree_model_get_iter(model, &iter, path)) {
         gtk_tree_model_get(model, &iter, 0, &name, 1, &ip, -1);
         printf("Try to connect [%s]\n",name);
-        //metaserver_connect_to(name);
+        metaserver_connect_to(name);
     }
 }
 
@@ -1301,7 +954,7 @@ void on_metaserver_text_entry_activate(GtkEntry *entry, gpointer user_data) {
     printf("on_metaserver_text_entry_activate\n");
     entry_text = gtk_entry_get_text(GTK_ENTRY(entry));
     printf("Try to connect [%s]\n",entry_text);
-    //metaserver_connect_to(entry_text);
+    metaserver_connect_to(entry_text);
 }
 
 //Trigger when typing in text entry line
@@ -1343,17 +996,13 @@ void on_metaserver_select_clicked(GtkButton *button, gpointer user_data) {
         name = metaserver_txt;
     }
     printf("Try to connect [%s]\n",name);
-    //metaserver_connect_to(name);
+    metaserver_connect_to(name);
 }
 
 
 void on_button_metaserver_quit_pressed(GtkButton *button, gpointer user_data) {
     on_window_destroy_event(GTK_OBJECT(button), user_data);
 }
-
-enum {
-    LIST_HOSTNAME, LIST_IPADDR, LIST_IDLETIME, LIST_PLAYERS, LIST_VERSION, LIST_COMMENT
-};
 
 //Trigger when selecting item by mouse
 gboolean metaserver_selection_func(GtkTreeSelection *selection,
@@ -1517,6 +1166,651 @@ void get_metaserver() {
     gtk_widget_hide(metaserver_window);
 }
 
+void SockList_Init(SockList *sl, uint8 *buf)
+{
+    sl->len=0;
+    sl->buf=buf + 2;    /* reserve two bytes for total length */
+}
+void SockList_AddChar(SockList *sl, char c)
+{
+    sl->buf[sl->len++]=c;
+}
+
+void SockList_AddShort(SockList *sl, uint16 data)
+{
+    sl->buf[sl->len++] = (data>>8)&0xff;
+    sl->buf[sl->len++] = data & 0xff;
+}
+
+void SockList_AddInt(SockList *sl, uint32 data)
+{
+    sl->buf[sl->len++] = (data>>24)&0xff;
+    sl->buf[sl->len++] = (data>>16)&0xff;
+    sl->buf[sl->len++] = (data>>8)&0xff;
+    sl->buf[sl->len++] = data & 0xff;
+}
+
+
+void SockList_AddString(SockList *sl, const char *str)
+{
+    int len = strlen(str);
+
+    if (sl->len + len > MAX_BUF-2) {
+        len = MAX_BUF-2 - sl->len;
+    }
+    memcpy(sl->buf + sl->len, str, len);
+    sl->len += len;
+}
+
+void script_monitor_str(const char *command)
+{
+    int i;
+    /* For each script... */
+    for (i = 0; i < num_scripts; ++i) {
+        /* Do we send the command? */
+//        if (scripts[i].monitor) {
+  //          char buf[1024];
+  //          snprintf(buf, sizeof(buf), "monitor %s\n", command);
+   //         write(scripts[i].out_fd, buf, strlen(buf));
+   //     }
+    }
+}
+
+static int write_socket(int fd, const unsigned char *buf, int len)
+{
+    int amt=0;
+    const unsigned char *pos=buf;
+    /* If we manage to write more than we wanted, take it as a bonus */
+    while (len>0) {
+        do {
+#ifndef WIN32
+            amt=write(fd, pos, len);
+        } while ((amt<0) && ((errno==EINTR) || (errno=EAGAIN)));
+#else
+            amt=send(fd, pos, len, 0);
+        }
+        while ((amt<0) && (WSAGetLastError()==EINTR));
+#endif
+        if (amt < 0) { /* We got an error */
+            printf("New socket (fd=%d) write failed: %s.\n",fd, strerror(errno));
+            return -1;
+        }
+        if (amt==0) {
+            printf("Write_To_Socket: No data written out.");
+        }
+        len -= amt;
+        pos += amt;
+    }
+    return 0;
+}
+
+int SockList_Send(SockList *sl, int fd)
+{
+    sl->buf[-2] = sl->len / 256;
+    sl->buf[-1] = sl->len % 256;
+
+    return write_socket(fd, sl->buf-2, sl->len+2);
+}
+
+
+int cs_print_string(int fd, const char *str, ...)
+{
+    va_list args;
+    SockList sl;
+    uint8 buf[MAX_BUF];
+
+    SockList_Init(&sl, buf);
+    va_start(args, str);
+    sl.len += vsprintf((char*)sl.buf + sl.len, str, args);
+    va_end(args);
+    //[version 1023 1029]
+    printf("cs_print_string:[%s]\n",sl.buf);
+    //script_monitor_str((char*)sl.buf);
+    //return 0;
+   return SockList_Send(&sl, fd);
+}
+
+void SendVersion(ClientSocket csock) {
+    cs_print_string(csock.fd, "version %d %d %s",
+            VERSION_CS, VERSION_SC, VERSION_INFO);
+}
+
+void close_server_connection()
+{
+#ifdef WIN32
+    closesocket(csocket.fd);
+#else
+    close(csocket.fd);
+#endif
+    csocket.fd = -1;
+}
+
+void TickCmd(uint8 *data, int len)
+{
+
+   // tick = GetInt_String(data);
+
+    /* Up to the specific client to decide what to do */
+   // client_tick(tick);
+}
+
+void VersionCmd(char *data, int len) {
+    char *cp;
+    printf("VersionCmd:[%s\n]",data);
+    csocket.cs_version = atoi(data);
+    /* set sc_version in case it is an old server supplying only one version */
+    csocket.sc_version = csocket.cs_version;
+    if (csocket.cs_version != VERSION_CS) {
+        printf("Differing C->S version numbers (%d,%d)", VERSION_CS, csocket.cs_version);
+        /*  exit(1);*/
+    }
+    cp = strchr(data, ' ');
+    if (!cp) {
+        return;
+    }
+    csocket.sc_version = atoi(cp);
+    if (csocket.sc_version != VERSION_SC) {
+        printf("Differing S->C version numbers (%d,%d)", VERSION_SC, csocket.sc_version);
+    }
+    cp = strchr(cp + 1, ' ');
+    if (cp) {
+        printf("Playing on server type %s", cp);
+    }
+}
+
+void ReplyInfoCmd(uint8 *buf, int len)
+{
+    uint8 *cp;
+    int i;
+    if (!buf) {
+        return;
+    }
+    for (i = 0; i < len; i++) {
+        /* Either a space or newline represents a break */
+        if (*(buf+i) == ' ' || *(buf+i) == '\n') {
+            break;
+        }
+    }
+    cp = buf+i;
+    *cp++ = '\0';
+    printf("ReplyInfoCmd_cmd: [%s]\n",buf);
+    printf("ReplyInfoCmd_data: [%s]\n",cp);
+    if (!strcmp((char*)buf, "image_info")) {
+        //get_image_info(cp, len-i-1);
+    }
+}
+
+void DoClient(ClientSocket *csocket)
+{
+    int i, len;
+    unsigned char *data;
+
+    while (1) {
+        i = SockList_ReadPacket(csocket->fd, &csocket->inbuf, MAXSOCKBUF - 1);
+        /*
+         * If a socket error occurred while reading the packet, drop the
+         * server connection.  Is there a better way to handle this?
+         */
+        if (i == -1) {
+            close_server_connection();
+            return;
+        }
+        /*
+         * Drop incomplete packets without attempting to process the contents.
+         */
+        if (i == 0) {
+            return;
+        }
+        // printf("csocket->inbuf.buf: [%s]\n",csocket->inbuf.buf);
+
+        /*
+         * Null-terminate the buffer, and set the data pointer so it points
+         * to the first character of the data (following the packet length).
+         */
+        csocket->inbuf.buf[csocket->inbuf.len] = '\0';
+        data = csocket->inbuf.buf + 2;
+        /*
+         * Commands that provide data are always followed by a space.  Find
+         * the space and convert it to a null character.  If no spaces are
+         * found, the packet contains a command with no associatd data.
+         */
+        while ((*data != ' ') && (*data != '\0')) {
+            ++data;
+        }
+        if (*data == ' ') {
+            *data = '\0';
+            data++;
+            len = csocket->inbuf.len - (data - csocket->inbuf.buf);
+        } else {
+            len = 0;
+        }
+        /*
+         * Search for the command in the list of supported server commands.
+         * If the server command is supported by the client, let the script
+         * watcher know what command was received, then process it and quit
+         * searching the command list.
+         */
+         //Do command calling
+         printf("csocket->inbuf.buf+2: [%s]\n",csocket->inbuf.buf+2);
+         
+        for(i = 0; i < NCOMMANDS; i++) {
+            if (strcmp((char*)csocket->inbuf.buf+2,commands[i].cmdname)==0) {
+                //script_watch((char*)csocket->inbuf.buf+2,data,len,commands[i].cmdformat);
+                commands[i].cmdproc(data,len);
+                break;
+            }
+        }
+        
+        /*
+         * After processing the command, mark the socket input buffer empty.
+         */
+        csocket->inbuf.len=0;
+        /*
+         * Complain about unsupported commands to facilitate troubleshooting.
+         * The client and server should negotiate a connection such that the
+         * server does not send commands the client does not support.
+         */
+        if (i == NCOMMANDS) {
+            printf("Unrecognized command from server (%s)\n",
+                   csocket->inbuf.buf+2);
+        }
+    }
+}
+
+static void do_account_login(const char *name, const char *password) {
+    SockList sl;
+    uint8 buf[MAX_BUF];
+
+    if (!name || !password || *name == 0 || *password == 0) {
+        printf("You must enter both a name and password!\n");
+        gtk_label_set_text(GTK_LABEL(label_account_login_status),
+                           "You must enter both a name and password!");
+    } else {
+        gtk_label_set_text(GTK_LABEL(label_account_login_status), "");
+/*
+        SockList_Init(&sl, buf);
+        SockList_AddString(&sl, "accountlogin ");
+        SockList_AddChar(&sl, strlen(name));
+        SockList_AddString(&sl, name);
+        SockList_AddChar(&sl, strlen(password));
+        SockList_AddString(&sl, password);
+        SockList_Send(&sl, csocket.fd);
+        printf("SockList_Send: [%s]\n", sl.buf);
+ */
+        SendVersion(csocket);
+        printf("do_account_login: send login\n");
+        while (1) {
+            DoClient(&csocket);
+        usleep(10*1000);  
+        }
+        /* Store password away for new character creation */
+        snprintf(account_password, sizeof(account_password), "%s", password);
+    }
+}
+
+void
+on_entry_account_name_activate(GtkEntry *entry, gpointer user_data) {
+    const char *password;
+
+    password = gtk_entry_get_text(GTK_ENTRY(entry_account_password));
+
+    if (!password || *password == 0) {
+        gtk_widget_grab_focus(entry_account_password);
+    } else {
+        do_account_login(gtk_entry_get_text(GTK_ENTRY(entry_account_name)), password);
+    }
+}
+
+void
+on_entry_account_password_activate(GtkEntry *entry, gpointer user_data) {
+    const char *name;
+
+    name = gtk_entry_get_text(GTK_ENTRY(entry_account_name));
+
+    if (!name || *name == 0) {
+        gtk_widget_grab_focus(entry_account_name);
+    } else {
+        do_account_login(name, gtk_entry_get_text(GTK_ENTRY(entry_account_password)));
+    }
+}
+
+void
+on_button_login_clicked(GtkButton *button, gpointer user_data) {
+    printf("on_button_login_clicked\n");
+    do_account_login(gtk_entry_get_text(GTK_ENTRY(entry_account_name)),
+                     gtk_entry_get_text(GTK_ENTRY(entry_account_password)));
+}
+
+
+static void init_login_window() {
+    GtkTextIter end;
+
+    login_window = GTK_WIDGET(gtk_builder_get_object(dialog_xml, "login_window"));
+    gtk_window_set_transient_for(
+        GTK_WINDOW(login_window), GTK_WINDOW(window_root));
+
+    button_login =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_login"));
+    button_create_account =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_create_account"));
+    button_go_metaserver =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_go_metaserver"));
+    button_exit_client =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_exit_client"));
+    label_account_login_status =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "label_account_login_status"));
+
+
+    login_pane[TEXTVIEW_MOTD].textview =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "textview_motd"));
+    textbuf_motd =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(login_pane[TEXTVIEW_MOTD].textview));
+
+    login_pane[TEXTVIEW_NEWS].textview =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "textview_news"));
+    textbuf_news =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(login_pane[TEXTVIEW_NEWS].textview));
+
+    entry_account_name =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "entry_account_name"));
+    entry_account_password =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "entry_account_password"));
+
+   // g_signal_connect((gpointer) login_window, "delete_event",
+   //                  G_CALLBACK(on_window_delete_event), NULL);
+   g_signal_connect((gpointer) entry_account_name, "activate",
+                     G_CALLBACK(on_entry_account_name_activate), NULL);
+   g_signal_connect((gpointer) entry_account_password, "activate",
+                     G_CALLBACK(on_entry_account_password_activate), NULL);
+   g_signal_connect((gpointer) button_login, "clicked",
+                    G_CALLBACK(on_button_login_clicked), NULL);
+   /* g_signal_connect((gpointer) button_create_account, "clicked",
+                     G_CALLBACK(on_button_create_account_clicked), NULL);
+    g_signal_connect((gpointer) button_go_metaserver, "clicked",
+                     G_CALLBACK(on_button_go_metaserver_clicked), NULL);
+    g_signal_connect((gpointer) button_exit_client, "clicked",
+                     G_CALLBACK(on_button_exit_client_clicked), NULL);
+*/
+ }
+
+void start_login(int method) {
+  //  serverloginmethod = method;
+    if (!start_login_has_init) {
+        init_login_window();
+/*
+        init_add_character_window();
+
+        init_choose_char_window();
+
+        init_create_account_window();
+
+        init_new_character_window();
+
+        init_account_password_window();
+
+        start_login_has_init = 1;
+        update_login_info(INFO_NEWS);
+        update_login_info(INFO_RULES);
+        update_login_info(INFO_MOTD);
+        */
+    }
+/*
+    gtk_entry_set_text(GTK_ENTRY(entry_account_name), "");
+    gtk_entry_set_text(GTK_ENTRY(entry_account_password), "");
+    gtk_widget_grab_focus(entry_account_name);
+    gtk_widget_show(login_window);
+*/
+    gtk_widget_show(login_window);
+}
+
+
+
+void SetupCmd(char *buf, int len)
+{
+    int s;
+    char *cmd, *param;
+    printf("SetupCmd: %s\n", buf);
+    for (s = 0; ; ) {
+        if (s >= len) { /* Ugly, but for secure...*/
+            break;
+        }
+
+        cmd = &buf[s];
+
+        /* Find the next space, and put a null there */
+        for (; buf[s] && buf[s] != ' '; s++)
+            ;
+        buf[s++] = 0;
+        while (buf[s] == ' ') {
+            s++;
+        }
+        if (s >= len) {
+            break;
+        }
+
+        param = &buf[s];
+
+        for (; buf[s] && buf[s] != ' '; s++)
+            ;
+        buf[s++] = 0;
+        while (s < len && buf[s] == ' ') {
+            s++;
+        }
+        printf("SETUP_CMD: [%s]\n",cmd);
+        printf("SETUP_PARAM: [%s]\n",param);
+        if (!strcmp(cmd, "loginmethod")) {
+            int method = atoi(param);
+            if (method) {
+                start_login(method);
+            }
+        }
+           
+    }
+}
+
+void FailureCmd(char *buf, int len)
+{
+    char *cp;
+    cp = strchr(buf,' ');
+    if (!cp) {
+        return;
+    }
+    *cp = 0;
+    cp++;
+
+    if (!strcmp(buf,"accountlogin")) {
+         printf("FailureCmd: %s:%s",buf, cp);
+        //account_login_failure(cp);
+    } else if (!strcmp(buf,"accountnew")) {
+         printf("FailureCmd: %s:%s",buf, cp);
+        //account_creation_failure(cp);
+    } else if (!strcmp(buf,"accountaddplayer")) {
+         printf("FailureCmd: %s:%s",buf, cp);
+        //account_add_character_failure(cp);
+    } else if (!strcmp(buf,"createplayer")) {
+        //create_new_character_failure(cp);
+        printf("FailureCmd: %s:%s",buf, cp);
+    } else if (!strcmp(buf, "accountpw")) {
+        printf("FailureCmd: %s:%s",buf, cp);
+        //account_change_password_failure(cp);
+    } else
+        printf("FailureCmd:Got a failure response we can not handle: %s:%s",buf, cp);
+}
+
+int SockList_ReadPacket(int fd, SockList *sl, int len)
+{
+    int stat, toread;
+
+    /* We already have a partial packet */
+    if (sl->len<2) {
+#ifndef WIN32
+        do {
+            stat=read(fd, sl->buf + sl->len, 2-sl->len);
+        } while ((stat==-1) && (errno==EINTR));
+#else
+        do {
+            stat=recv(fd, sl->buf + sl->len, 2-sl->len, 0);
+        } while ((stat==-1) && (WSAGetLastError()==EINTR));
+#endif
+
+        if (stat<0) {
+            /* In non blocking mode, EAGAIN is set when there is no data
+             * available.
+             */
+#ifndef WIN32
+            if (errno!=EAGAIN && errno!=EWOULDBLOCK)
+#else
+            if (WSAGetLastError()!=EAGAIN && WSAGetLastError()!=WSAEWOULDBLOCK)
+#endif
+            {
+                printf("ReadPacket got error %d, returning -1",errno);
+                return -1;
+            }
+            return 0;   /*Error */
+        }
+        if (stat==0) {
+            return -1;
+        }
+
+        sl->len += stat;
+#ifdef CS_LOGSTATS
+        cst_tot.ibytes += stat;
+        cst_lst.ibytes += stat;
+#endif
+        if (stat<2) {
+            return 0;    /* Still don't have a full packet */
+        }
+    }
+
+    /* Figure out how much more data we need to read.  Add 2 from the
+     * end of this - size header information is not included.
+     */
+    toread = 2+(sl->buf[0] << 8) + sl->buf[1] - sl->len;
+    if ((toread + sl->len) > len) {
+        printf("Want to read more bytes than will fit in buffer.\n");
+        /* return error so the socket is closed */
+        return -1;
+    }
+    do {
+#ifndef WIN32
+        do {
+            stat = read(fd, sl->buf+ sl->len, toread);
+        } while ((stat<0) && (errno==EINTR));
+#else
+        do {
+            stat = recv(fd, sl->buf+ sl->len, toread, 0);
+        } while ((stat<0) && (WSAGetLastError()==EINTR));
+#endif
+        if (stat<0) {
+
+#ifndef WIN32
+            if (errno!=EAGAIN && errno!=EWOULDBLOCK)
+#else
+            if (WSAGetLastError()!=EAGAIN && WSAGetLastError()!=WSAEWOULDBLOCK)
+#endif
+            {
+                printf("ReadPacket got error %d, returning 0\n",errno);
+            }
+            return 0;       /*Error */
+        }
+        if (stat==0) {
+            return -1;
+        }
+        sl->len += stat;
+
+#ifdef CS_LOGSTATS
+        cst_tot.ibytes += stat;
+        cst_lst.ibytes += stat;
+#endif
+        toread -= stat;
+        if (toread==0) {
+            return 1;
+        }
+
+        if (toread < 0) {
+           printf("SockList_ReadPacket: Read more bytes than desired.\n");
+            return 1;
+        }
+    } while (toread>0);
+    return 0;
+}
+
+void mapdata_set_size(int viewx, int viewy)
+{
+    mapdata_init();
+
+    width = viewx;
+    height = viewy;
+    pl_pos.x = FOG_MAP_SIZE/2-width/2;
+    pl_pos.y = FOG_MAP_SIZE/2-height/2;
+}
+
+void negotiate_connection(int sound)
+{
+    printf("call negotiate_connection\n");
+    int tries;
+    SendVersion(csocket);
+    tries=0;
+    while (csocket.cs_version==0) {
+        DoClient(&csocket);
+        if (csocket.fd == -1) {
+            printf("csocket.fd = -1 , error\n");
+            return;
+        }
+        usleep(10*1000);    /* 10 milliseconds */
+        tries++;
+        //printf("tries %d\n",tries);
+        /* If we have't got a response in 10 seconds, bail out */
+        if (tries > 1000) {
+            printf("tries > 1000 close_server_connection()\n");
+            close_server_connection();
+            return;
+        }
+    }
+    printf("csocket.cs_version: %d\n",csocket.cs_version);
+     printf("csocket.sc_version: %d\n",csocket.sc_version);
+
+   cs_print_string(csocket.fd,
+                    "setup map2cmd 1 tick 1 sound2 %d darkness %d spellmon 1 spellmon 2 "
+                    "faceset %d facecache %d want_pickup 1 loginmethod %d newmapcmd 1",
+                    (0 >= 0) ? 3 : 0, CFG_LT_TILE ? 1 : 0,
+                    1, FALSE, wantloginmethod);
+
+    cs_print_string(csocket.fd, "requestinfo skill_info");
+    cs_print_string(csocket.fd,"requestinfo exp_table");
+    cs_print_string(csocket.fd,"requestinfo motd");
+    cs_print_string(csocket.fd,"requestinfo news");
+    cs_print_string(csocket.fd,"requestinfo rules");
+
+    mapdata_set_size(11, 11);
+
+    if (csocket.sc_version >= 1027) {
+        int last_end=0, last_start=-99;
+        cs_print_string(csocket.fd,"requestinfo image_info");
+        requestinfo_sent = RI_IMAGE_INFO;
+        replyinfo_status = 0;
+        replyinfo_last_face = 0;
+        //Main process receive package from server
+        int count;
+        do {
+            DoClient(&csocket);
+            if (csocket.fd == -1) {
+                printf("csocket.fd=-1\n");
+                return;
+            }
+            gtk_main_iteration();
+            usleep(10*1000); 
+            count++;
+            //printf("count:%2d\n",count);
+            if (count > 100) count = 0;
+        } while (replyinfo_status != requestinfo_sent);
+        printf("replyinfo_status != requestinfo_sent :Exit \n");
+    }
+
+}
+
 int main(int argc, char *argv[]) {
 
     gtk_init(&argc, &argv);
@@ -1535,7 +1829,17 @@ int main(int argc, char *argv[]) {
             printf("server = NULL\n");
             metaserver2_get_info();
             get_metaserver();
+        }else{
+             printf("SERVER=%s\n",server);
+             csocket.fd = init_connection(server, 13327);
+             server = NULL;
+             if (csocket.fd == -1) {
+                printf("csocket.fd=-1\n");
+                continue;
+             }
         }
+        negotiate_connection(0);
+        printf("call event_loop()\n");
     	event_loop();
 	}
 
