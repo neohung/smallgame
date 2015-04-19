@@ -1,4 +1,5 @@
 #include "test1.h"
+#include <png.h>
 
 void error_dialog(char *description, char *information) {
     GtkWidget *dialog;
@@ -122,13 +123,61 @@ int do_timeout() {
 }
 
 
+void do_network() {
+     printf("do_network\n");
+     fd_set tmp_read;
+     int pollret;
+     if (csocket.fd == -1) {
+         printf("a) do_network: csocket.fd == -1\n");
+        if (csocket_fd) {
+            gdk_input_remove(csocket_fd);
+            csocket_fd = 0;
+            gtk_main_quit();
+        }
+        return;
+    }
+    //
+    FD_ZERO(&tmp_read);
+    FD_SET(csocket.fd, &tmp_read);
+    timeout.tv_sec = timeout.tv_usec = 0;
+
+    pollret = select(maxfd, &tmp_read, NULL, NULL, &timeout);
+    if (pollret > 0)
+    {
+        if (FD_ISSET(csocket.fd, &tmp_read)) {
+            DoClient(&csocket);
+        }
+    }
+    //
+    if (csocket.fd == -1) {
+         printf("b) do_network: csocket.fd == -1\n");
+        if (csocket_fd) {
+            gdk_input_remove(csocket_fd);
+            csocket_fd = 0;
+            gtk_main_quit();
+        }
+        return;
+    }
+    
+    //draw_map(FALSE);
+    //draw_lists();
+}
+
 void event_loop() {
+    int tag;
 	printf("loop\n");
 	gtk_timeout_add(10, (GtkFunction) do_timeout, NULL);
 #ifdef WIN32
     //gtk_timeout_add(25, (GtkFunction) do_scriptout, NULL);
 #endif
+
+     csocket_fd = gdk_input_add((gint) csocket.fd,
+                               GDK_INPUT_READ,
+                               (GdkInputFunction) do_network, &csocket);
+
+     tag = csocket_fd;
     gtk_main();
+    gtk_timeout_remove(tag);
 }
 
 sint16 mapdata_face(int x, int y, int layer)
@@ -1427,7 +1476,7 @@ static void do_account_login(const char *name, const char *password) {
                            "You must enter both a name and password!");
     } else {
         gtk_label_set_text(GTK_LABEL(label_account_login_status), "");
-/*
+
         SockList_Init(&sl, buf);
         SockList_AddString(&sl, "accountlogin ");
         SockList_AddChar(&sl, strlen(name));
@@ -1436,13 +1485,14 @@ static void do_account_login(const char *name, const char *password) {
         SockList_AddString(&sl, password);
         SockList_Send(&sl, csocket.fd);
         printf("SockList_Send: [%s]\n", sl.buf);
- */
+ /*
         SendVersion(csocket);
         printf("do_account_login: send login\n");
         while (1) {
             DoClient(&csocket);
         usleep(10*1000);  
         }
+        */
         /* Store password away for new character creation */
         snprintf(account_password, sizeof(account_password), "%s", password);
     }
@@ -1473,6 +1523,91 @@ on_entry_account_password_activate(GtkEntry *entry, gpointer user_data) {
         do_account_login(name, gtk_entry_get_text(GTK_ENTRY(entry_account_password)));
     }
 }
+
+
+static void do_account_create(const char *name, const char *p1,
+                              const char *p2) {
+    SockList sl;
+    uint8 buf[MAX_BUF];
+
+    if (strcmp(p1, p2)) {
+        gtk_label_set_text(GTK_LABEL(label_create_account_status),
+                           "The passwords you entered do not match!");
+        return;
+    } else {
+        gtk_label_set_text(GTK_LABEL(label_create_account_status), "");
+        SockList_Init(&sl, buf);
+        SockList_AddString(&sl, "accountnew ");
+        SockList_AddChar(&sl, strlen(name));
+        SockList_AddString(&sl, name);
+        SockList_AddChar(&sl, strlen(p1));
+        SockList_AddString(&sl, p1);
+        printf("do_account_create: [%s]\n",sl.buf);
+ //       SockList_Send(&sl, csocket.fd);
+        /* Store password away for new character creation */
+        snprintf(account_password, sizeof(account_password), "%s", p1);
+    }
+}
+
+void
+on_button_new_create_account_clicked(GtkButton *button, gpointer user_data) {
+    const char *password1, *password2, *name;
+
+    password1 = gtk_entry_get_text(GTK_ENTRY(entry_new_account_password));
+    password2 = gtk_entry_get_text(GTK_ENTRY(entry_new_confirm_password));
+    name = gtk_entry_get_text(GTK_ENTRY(entry_new_account_name));
+
+    if (name && name[0] && password1 && password1[0] && password2 && password2[0]) {
+        do_account_create(name, password1, password2);
+    } else {
+        gtk_label_set_text(GTK_LABEL(label_create_account_status),
+                           "You must fill in all three entries!");
+    }
+}
+
+
+static void init_create_account_window() {
+    GtkTextIter end;
+
+    create_account_window =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "create_account_window"));
+
+      button_new_create_account =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_new_create_account"));
+    button_new_cancel =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_new_cancel"));
+    login_pane[TEXTVIEW_RULES_ACCOUNT].textview =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "textview_rules_account"));
+
+    textbuf_rules_account =
+        gtk_text_view_get_buffer(
+            GTK_TEXT_VIEW(login_pane[TEXTVIEW_RULES_ACCOUNT].textview));
+
+    entry_new_account_name =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "entry_new_account_name"));
+    entry_new_account_password =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "entry_new_account_password"));
+    entry_new_confirm_password =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "entry_new_confirm_password"));
+    label_create_account_status =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "label_create_account_status"));
+
+    g_signal_connect((gpointer) button_new_create_account, "clicked",
+                     G_CALLBACK(on_button_new_create_account_clicked), NULL);
+ 
+    //gtk_widget_show(create_account_window);
+}
+
+void
+on_button_create_account_clicked(GtkButton *button, gpointer user_data) {
+    gtk_widget_hide(login_window);
+    gtk_label_set_text(GTK_LABEL(label_create_account_status), "");
+    gtk_entry_set_text(GTK_ENTRY(entry_new_account_name), "");
+    gtk_entry_set_text(GTK_ENTRY(entry_new_account_password), "");
+    gtk_entry_set_text(GTK_ENTRY(entry_new_confirm_password), "");
+    gtk_widget_show(create_account_window);
+}
+
 
 void
 on_button_login_clicked(GtkButton *button, gpointer user_data) {
@@ -1526,8 +1661,9 @@ static void init_login_window() {
                      G_CALLBACK(on_entry_account_password_activate), NULL);
    g_signal_connect((gpointer) button_login, "clicked",
                     G_CALLBACK(on_button_login_clicked), NULL);
-   /* g_signal_connect((gpointer) button_create_account, "clicked",
+    g_signal_connect((gpointer) button_create_account, "clicked",
                      G_CALLBACK(on_button_create_account_clicked), NULL);
+    /*
     g_signal_connect((gpointer) button_go_metaserver, "clicked",
                      G_CALLBACK(on_button_go_metaserver_clicked), NULL);
     g_signal_connect((gpointer) button_exit_client, "clicked",
@@ -1535,10 +1671,229 @@ static void init_login_window() {
 */
  }
 
+void create_character_window_show()
+{
+    printf("create_character_window_show\n");
+    //cs_print_string(csocket.fd, "requestinfo race_list");
+    //cs_print_string(csocket.fd, "requestinfo class_list");
+    //cs_print_string(csocket.fd, "requestinfo newcharinfo");
+     gtk_widget_show(create_character_window);
+}
+
+void
+on_button_create_character_clicked(GtkButton *button, gpointer user_data) {
+    gtk_widget_hide(choose_char_window);
+    printf("on_button_create_character_clicked: serverloginmethod=%d \n",serverloginmethod);
+    if (serverloginmethod >= 2) {
+        create_character_window_show();
+    } else {
+        gtk_widget_show(new_character_window);
+        gtk_entry_set_text(GTK_ENTRY(entry_new_character_name), "");
+    }
+}
+
+
+static void create_new_character() {
+    const char *name;
+    uint8 buf[MAX_BUF];
+    SockList sl;
+
+    SockList_Init(&sl, buf);
+
+    name =  gtk_entry_get_text(GTK_ENTRY(entry_new_character_name));
+
+   // if (!name || *name == 0) {
+   //     gtk_label_set_text(GTK_LABEL(label_new_char_status),
+    //                       "You must enter a character name.");
+    //    return;
+    //} else {
+       //strcpy(name,"aaa");
+        gtk_label_set_text(GTK_LABEL(label_new_char_status), "");
+
+        SockList_AddString(&sl, "createplayer ");
+        SockList_AddChar(&sl, strlen(name));
+        SockList_AddString(&sl, name);
+        SockList_AddChar(&sl, strlen(account_password));
+        SockList_AddString(&sl, account_password);
+        SockList_Send(&sl, csocket.fd);
+   // }
+}
+
+
+static void send_create_player_to_server()
+{
+    const gchar *char_name;
+    int i, on_choice, tmp;
+    SockList sl;
+    char buf[MAX_BUF];
+    uint8 sockbuf[MAX_BUF];
+
+    SockList_Init(&sl, sockbuf);
+    SockList_AddString(&sl, "createplayer ");
+    SockList_AddChar(&sl, strlen("neo"));
+    SockList_AddString(&sl, "neo");
+    SockList_AddChar(&sl, strlen(account_password));
+
+    SockList_AddString(&sl, account_password);
+
+    snprintf(buf, MAX_BUF, "race %s", "dwarf_player");
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+ 
+    snprintf(buf, MAX_BUF, "class %s", "alchemist_class");
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "starting_map %s", "map_beginners_house");
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "str",15);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "con",10);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "dex",16);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "int",11);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "wis",12);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "pow",11);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    snprintf(buf, MAX_BUF, "%s %d", "cha",10);
+    SockList_AddChar(&sl, strlen(buf)+1);
+    SockList_AddString(&sl, buf);
+    SockList_AddChar(&sl, 0);
+
+    SockList_Send(&sl, csocket.fd);
+
+    //keybindings_init(char_name);
+}
+
+
+
+void
+on_button_cc_done(GtkButton *button, gpointer user_data)
+{
+    printf("on_button_cc_done\n");
+    send_create_player_to_server();
+    /*
+    if (character_data_ok()) {
+         gtk_label_set_text(GTK_LABEL(label_cc_status_update),
+                           "Sending new character information to server");
+        show_window(WINDOW_CREATE_CHARACTER);
+        send_create_player_to_server();
+    }
+    */
+}
+
+
+
+void init_create_character_window() {
+    char tmpbuf[80];
+    int i;
+    GtkTextIter iter;
+    GtkCellRenderer *renderer;
+
+    create_character_window = GTK_WIDGET(gtk_builder_get_object(dialog_xml, "create_character_window"));
+    gtk_window_set_transient_for(GTK_WINDOW(create_character_window), GTK_WINDOW(window_root));
+
+
+    button_cc_done = GTK_WIDGET(gtk_builder_get_object(dialog_xml,"button_cc_done"));
+    button_cc_cancel = GTK_WIDGET(gtk_builder_get_object(dialog_xml,"button_cc_cancel"));
+    button_choose_starting_map = GTK_WIDGET(gtk_builder_get_object(dialog_xml,"button_choose_starting_map"));
+    label_cc_status_update = GTK_WIDGET(gtk_builder_get_object(dialog_xml,"label_cc_status_update"));
+    g_signal_connect ((gpointer) button_cc_done, "clicked",
+                      G_CALLBACK (on_button_cc_done), NULL);
+  
+   
+}
+
+/*
+void
+on_button_create_new_char_clicked(GtkButton *button, gpointer user_data) {
+    printf("on_button_create_new_char_clicked\n");   
+    create_new_character();
+}
+
+void
+on_button_new_char_cancel_clicked(GtkButton *button, gpointer user_data) {
+    gtk_widget_hide(new_character_window);
+    gtk_widget_show(choose_char_window);
+}
+*/
+/*
+static void init_new_character_window() {
+    new_character_window =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "create_character_window"));
+    
+     gtk_window_set_transient_for(
+        GTK_WINDOW(new_character_window), GTK_WINDOW(window_root));
+
+
+    button_create_new_char =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_create_character"));
+          button_new_char_cancel =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_cc_cancel"));
+ 
+  entry_new_character_name =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "cc_entry_new_character_name"));
+
+    g_signal_connect((gpointer) button_create_new_char, "clicked",
+                     G_CALLBACK(on_button_create_new_char_clicked), NULL);
+       g_signal_connect((gpointer) button_new_char_cancel, "clicked",
+                     G_CALLBACK(on_button_new_char_cancel_clicked), NULL);
+ 
+ 
+}
+*/
+ static void init_choose_char_window() {
+    GtkTextIter end;
+    GtkCellRenderer *renderer;
+    GtkTreeViewColumn *column;
+
+    choose_char_window =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "choose_character_window"));
+
+    button_create_character =
+        GTK_WIDGET(gtk_builder_get_object(dialog_xml, "button_create_character"));
+    g_signal_connect((gpointer) button_create_character, "clicked",
+                     G_CALLBACK(on_button_create_character_clicked), NULL);
+  
+}
+
 void start_login(int method) {
-  //  serverloginmethod = method;
+    serverloginmethod = method;
     if (!start_login_has_init) {
         init_login_window();
+
+        init_create_account_window();
+
+        init_choose_char_window();
+
+        init_create_character_window();
+  //      init_new_character_window();
 /*
         init_add_character_window();
 
@@ -1566,6 +1921,20 @@ void start_login(int method) {
 }
 
 
+void choose_character_init() {
+    gtk_widget_hide(login_window);
+    //gtk_widget_hide(add_character_window);
+    //gtk_widget_hide(create_account_window);
+    gtk_widget_show(choose_char_window);
+
+    gtk_list_store_clear(character_store);
+}
+
+
+void AccountPlayersCmd(char *buf, int len)
+{
+    choose_character_init();
+}
 
 void SetupCmd(char *buf, int len)
 {
@@ -1621,22 +1990,880 @@ void FailureCmd(char *buf, int len)
     cp++;
 
     if (!strcmp(buf,"accountlogin")) {
-         printf("FailureCmd: %s:%s",buf, cp);
+         printf("FailureCmd> %s:%s",buf, cp);
         //account_login_failure(cp);
     } else if (!strcmp(buf,"accountnew")) {
-         printf("FailureCmd: %s:%s",buf, cp);
+         printf("FailureCmd> %s:%s",buf, cp);
         //account_creation_failure(cp);
     } else if (!strcmp(buf,"accountaddplayer")) {
-         printf("FailureCmd: %s:%s",buf, cp);
+         printf("FailureCmd> %s:%s",buf, cp);
         //account_add_character_failure(cp);
     } else if (!strcmp(buf,"createplayer")) {
         //create_new_character_failure(cp);
-        printf("FailureCmd: %s:%s",buf, cp);
+        printf("FailureCmd> %s:%s",buf, cp);
     } else if (!strcmp(buf, "accountpw")) {
-        printf("FailureCmd: %s:%s",buf, cp);
+        printf("FailureCmd> %s:%s",buf, cp);
         //account_change_password_failure(cp);
     } else
-        printf("FailureCmd:Got a failure response we can not handle: %s:%s",buf, cp);
+        printf("FailureCmd> Got a failure response we can not handle: %s:%s",buf, cp);
+}
+
+int GetInt_String(const unsigned char *data)
+{
+    return ((data[0]<<24) + (data[1]<<16) + (data[2]<<8) + data[3]);
+}
+
+short GetShort_String(const unsigned char *data)
+{
+    return ((data[0]<<8)+data[1]);
+}
+
+sint64 GetInt64_String(const unsigned char *data)
+{
+#ifdef WIN32
+    return (((sint64)data[0]<<56) + ((sint64)data[1]<<48) +
+            ((sint64)data[2]<<40) + ((sint64)data[3]<<32) +
+            ((sint64)data[4]<<24) + ((sint64)data[5]<<16) + ((sint64)data[6]<<8) + (sint64)data[7]);
+#else
+    return (((uint64)data[0]<<56) + ((uint64)data[1]<<48) +
+            ((uint64)data[2]<<40) + ((uint64)data[3]<<32) +
+            ((uint64)data[4]<<24) + (data[5]<<16) + (data[6]<<8) + data[7]);
+#endif
+}
+
+
+void new_player (long tag, char *name, long weight, long face)
+{
+    Spell *spell, *spnext;
+
+    cpl.ob->tag    = tag;
+    cpl.ob->nrof   = 1;
+   // copy_name(cpl.ob->d_name, name);
+
+    if (strlen(name) != 0) {
+        //keybindings_init(name);
+    }
+
+    cpl.ob->weight = (float) weight / 1000;
+    cpl.ob->face   = face;
+
+    if (cpl.spelldata) {
+        for (spell = cpl.spelldata; spell; spell = spnext) {
+            spnext = spell->next;
+            free(spell);
+        }
+        cpl.spelldata = NULL;
+    }
+
+}
+
+
+static void user_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
+{
+    //
+    memcpy(data, data_cp + data_start, length);
+    data_start += length;
+}
+
+//Convert png data to RGB888 data and output width,height
+uint8 *png_to_data(uint8 *data, int len, uint32 *width, uint32 *height)
+{
+    //data and len input, get width and height
+    uint8 *pixels=NULL;
+    static png_bytepp rows=NULL;
+    static int rows_byte=0;
+
+    png_structp png_ptr;
+    png_infop   info_ptr;
+    int bit_depth, color_type, interlace_type, y;
+
+    data_len=len;
+    data_cp = data;
+    data_start=0;
+
+    png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr) {
+        return NULL;
+    }
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_read_struct(&png_ptr, NULL, NULL);
+        return NULL;
+    }
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        return NULL;
+    }
+    png_set_read_fn(png_ptr, NULL, user_read_data);
+    png_read_info(png_ptr, info_ptr);
+    //
+    *width = png_get_image_width(png_ptr, info_ptr);
+    *height = png_get_image_height(png_ptr, info_ptr);
+    bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+    color_type = png_get_color_type(png_ptr, info_ptr);
+    interlace_type = png_get_interlace_type(png_ptr, info_ptr);
+    //
+    if (color_type == PNG_COLOR_TYPE_PALETTE && bit_depth <= 8) {
+        //indexed images convert to RGB
+        png_set_expand(png_ptr);
+    }else if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) {
+        // grayscale images convert to RGB
+        png_set_expand (png_ptr);
+    } else if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+        // If we have transparency header, convert it to alpha channel 
+        png_set_expand(png_ptr);
+    } else if (bit_depth < 8) {
+        // If we have < 8 scale it up to 8 
+        png_set_expand(png_ptr);
+    }
+    //
+    if (bit_depth == 16) {
+        png_set_strip_16(png_ptr);
+    }
+    if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
+        //convert gray to RGB888
+        png_set_gray_to_rgb(png_ptr);
+    }
+    // If interlaced, handle that 
+    if (interlace_type != PNG_INTERLACE_NONE) {
+        png_set_interlace_handling(png_ptr);
+    }
+    // pad it to 4 bytes to make processing easier 
+    if (!(color_type & PNG_COLOR_MASK_ALPHA)) {
+        png_set_filler(png_ptr, 255, PNG_FILLER_AFTER);
+    }
+    // Update the info the reflect our transformations
+    png_read_update_info(png_ptr, info_ptr);
+
+    *width = png_get_image_width(png_ptr, info_ptr);
+    *height = png_get_image_height(png_ptr, info_ptr);
+    // malloc pixels and fill it then return 
+    pixels = (uint8*)malloc(*width **height * 4);
+    if (!pixels) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        exit(1);
+    }
+    // calculate png_bytepp struct rows, the size of a line
+    if (rows_byte == 0) {
+        rows = (png_bytepp)malloc(sizeof(png_byte*)*(*height));
+        rows_byte = *height;
+    } else if (*height > rows_byte) {
+        rows = (png_bytepp)realloc(rows, sizeof(png_byte *)*(*height));
+        if (rows == NULL) {
+            exit(EXIT_FAILURE);
+        }
+        rows_byte = *height;
+    }
+    if (!rows) {
+        png_destroy_read_struct (&png_ptr, &info_ptr, NULL);
+        free(pixels);
+        return NULL;
+    }
+    for (y=0; y<*height; y++) {
+        rows[y] = pixels + y **width * 4;
+    }
+    //png_read_image need png_ptr and rows
+    png_read_image(png_ptr, rows);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    return pixels;
+}
+
+static void free_pixmap(PixmapInfo *pi)
+{
+    if (pi->icon_image) {
+        g_object_unref(pi->icon_image);
+    }
+    if (pi->icon_mask) {
+        g_object_unref(pi->icon_mask);
+    }
+    if (pi->map_mask) {
+        gdk_pixmap_unref(pi->map_mask);
+    }
+    if (pi->map_image) {
+            gdk_pixmap_unref(pi->map_image);
+    }
+}
+
+//see Png.c
+int rgba_to_gdkpixbuf(uint8 *data,int width, int height,GdkPixbuf **pix)
+{
+    int rowstride;
+    guchar  *pixels, *p;
+    int x,y;
+
+    *pix  = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+    rowstride =  gdk_pixbuf_get_rowstride(*pix);
+    pixels = gdk_pixbuf_get_pixels(*pix);
+    for (y=0; y<height; y++) {
+        for (x=0; x<width; x++) {
+            p = pixels + y * rowstride + x * 4;
+            p[0] = data[4*(x + y * width)];
+            p[1] = data[4*(x + y * width) + 1 ];
+            p[2] = data[4*(x + y * width) + 2 ];
+            p[3] = data[4*(x + y * width) + 3 ];
+        }
+    }
+    return 0;
+}
+
+//Give rgb data and convert to GdkPixbuf* data , then save to pi->icon_image
+static void create_icon_image(uint8 *data, PixmapInfo *pi, int pixmap_num)
+{
+    pi->icon_mask = NULL;
+    if (rgba_to_gdkpixbuf(data, pi->icon_width, pi->icon_height, (GdkPixbuf**)&pi->icon_image)) {
+        printf("Unable to create scaled image, dest num = %d\n", pixmap_num);
+    }
+}
+
+int rgba_to_gdkpixmap(GdkWindow *window, uint8 *data,int width, int height,
+                      GdkPixmap **pix, GdkBitmap **mask, GdkColormap *colormap)
+{
+    GdkGC       *gc, *gc_alpha;
+    int         has_alpha=0, alpha;
+    GdkColor  scolor;
+    int x,y;
+    //malloc GdkPixmap *pix by window and width, height
+    *pix = gdk_pixmap_new(window, width, height, -1);
+
+    gc=gdk_gc_new(*pix);
+    gdk_gc_set_function(gc, GDK_COPY);
+
+    *mask=gdk_pixmap_new(window, width, height,1);
+    gc_alpha=gdk_gc_new(*mask);
+
+
+    //draw rectangle for GdkBitmap *mask first
+    scolor.pixel=1;
+    gdk_gc_set_foreground(gc_alpha, &scolor);
+    gdk_draw_rectangle(*mask, gc_alpha, 1, 0, 0, width, height);
+
+    scolor.pixel=0;
+    gdk_gc_set_foreground(gc_alpha, &scolor);
+
+    for (y=0; y<height; y++) {
+        for (x=0; x<width; x++) {
+            alpha = data[(y * width + x) * 4 +3];
+            // Transparent bit 
+            if (alpha==0) {
+                //alpha=0, use gdk_draw_point() with scolor.pixel=0 to Transparent it
+                gdk_draw_point(*mask, gc_alpha, x, y);
+                has_alpha=1;
+            }
+        }
+    }
+    //give RGB888 data, width, height , then draw to GdkPixmap *pix
+    gdk_draw_rgb_32_image(*pix, gc,  0, 0, width, height, GDK_RGB_DITHER_NONE, data, width*4);
+    
+    if (!has_alpha) {
+        //if !has_alpha=1 means no Transparent to use
+        gdk_pixmap_unref(*mask);
+        *mask = NULL;
+    }
+    gdk_gc_destroy(gc_alpha);
+    gdk_gc_destroy(gc);
+    return 0;
+}
+
+static void create_map_image(uint8 *data, PixmapInfo *pi)
+{
+    pi->map_image = NULL;
+    pi->map_mask = NULL;
+    rgba_to_gdkpixmap(window_root->window, data, pi->map_width, pi->map_height,
+                          (GdkPixmap**)&pi->map_image, (GdkBitmap**)&pi->map_mask,
+                          gtk_widget_get_colormap(window_root));
+}
+
+
+uint8 *rescale_rgba_data(uint8 *data, int *width, int *height, int scale)
+{
+    static int xrow[BPP * MAX_IMAGE_WIDTH], yrow[BPP*MAX_IMAGE_HEIGHT];
+    static uint8 *nrows[MAX_IMAGE_HEIGHT];
+
+    /* Figure out new height/width */
+    int new_width = *width  * scale / RATIO, new_height = *height * scale / RATIO;
+
+    int sourcerow=0, ytoleft, ytofill, xtoleft, xtofill, dest_column=0, source_column=0, needcol,
+        destrow=0;
+    int x,y;
+    uint8 *ndata;
+    uint8 r,g,b,a;
+
+    if (*width > MAX_IMAGE_WIDTH || new_width > MAX_IMAGE_WIDTH
+            || *height > MAX_IMAGE_HEIGHT || new_height > MAX_IMAGE_HEIGHT) {
+        exit(0);
+    }
+
+    /* clear old values these may have */
+    memset(yrow, 0, sizeof(int) **height * BPP);
+
+    ndata = (uint8*)malloc(new_width * new_height * BPP);
+
+    for (y=0; y<new_height; y++) {
+        nrows[y] = (png_bytep) (ndata + y * new_width * BPP);
+    }
+
+    ytoleft = scale;
+    ytofill = RATIO;
+
+    for (y=0,sourcerow=0; y < new_height; y++) {
+        memset(xrow, 0, sizeof(int) **width * BPP);
+        while (ytoleft < ytofill) {
+            for (x=0; x< *width; ++x) {
+                /* Only want to copy the data if this is not a transperent pixel.
+                 * If it is transparent, the color information is has is probably
+                 * bogus, and blending that makes the results look worse.
+                 */
+                if (data[(sourcerow **width + x)*BPP+3] > 0 ) {
+                    yrow[x*BPP] += ytoleft * data[(sourcerow **width + x)*BPP]/RATIO;
+                    yrow[x*BPP+1] += ytoleft * data[(sourcerow **width + x)*BPP+1]/RATIO;
+                    yrow[x*BPP+2] += ytoleft * data[(sourcerow **width + x)*BPP+2]/RATIO;
+                }
+                /* Alpha is a bit special - we don't want to blend it -
+                 * we want to take whatever is the more opaque value.
+                 */
+                if (data[(sourcerow **width + x)*BPP+3] > yrow[x*BPP+3]) {
+                    yrow[x*BPP+3] = data[(sourcerow **width + x)*BPP+3];
+                }
+            }
+            ytofill -= ytoleft;
+            ytoleft = scale;
+            if (sourcerow < *height) {
+                sourcerow++;
+            }
+        }
+
+        for (x=0; x < *width; ++x) {
+            if (data[(sourcerow **width + x)*BPP+3] > 0 ) {
+                xrow[x*BPP] = yrow[x*BPP] + ytofill * data[(sourcerow **width + x)*BPP] / RATIO;
+                xrow[x*BPP+1] = yrow[x*BPP+1] + ytofill * data[(sourcerow **width + x)*BPP+1] / RATIO;
+                xrow[x*BPP+2] = yrow[x*BPP+2] + ytofill * data[(sourcerow **width + x)*BPP+2] / RATIO;
+            }
+            if (data[(sourcerow **width + x)*BPP+3] > xrow[x*BPP+3]) {
+                xrow[x*BPP+3] = data[(sourcerow **width + x)*BPP+3];
+            }
+            yrow[x*BPP]=0;
+            yrow[x*BPP+1]=0;
+            yrow[x*BPP+2]=0;
+            yrow[x*BPP+3]=0;
+        }
+
+        ytoleft -= ytofill;
+        if (ytoleft <= 0) {
+            ytoleft = scale;
+            if (sourcerow < *height) {
+                sourcerow++;
+            }
+        }
+
+        ytofill = RATIO;
+        xtofill = RATIO;
+        dest_column = 0;
+        source_column=0;
+        needcol=0;
+        r=0;
+        g=0;
+        b=0;
+        a=0;
+
+        for (x=0; x< *width; x++) {
+            xtoleft = scale;
+
+            while (xtoleft >= xtofill) {
+                if (needcol) {
+                    dest_column++;
+                    r=0;
+                    g=0;
+                    b=0;
+                    a=0;
+                }
+
+                if (xrow[source_column*BPP+3] > 0) {
+                    r += xtofill * xrow[source_column*BPP] / RATIO;
+                    g += xtofill * xrow[1+source_column*BPP] / RATIO;
+                    b += xtofill * xrow[2+source_column*BPP] / RATIO;
+                }
+                if (xrow[3+source_column*BPP] > a) {
+                    a = xrow[3+source_column*BPP];
+                }
+
+                nrows[destrow][dest_column * BPP] = r;
+                nrows[destrow][1+dest_column * BPP] = g;
+                nrows[destrow][2+dest_column * BPP] = b;
+                nrows[destrow][3+dest_column * BPP] = a;
+                xtoleft -= xtofill;
+                xtofill = RATIO;
+                needcol=1;
+            }
+
+            if (xtoleft > 0 ) {
+                if (needcol) {
+                    dest_column++;
+                    r=0;
+                    g=0;
+                    b=0;
+                    a=0;
+                    needcol=0;
+                }
+
+                if (xrow[3+source_column*BPP] > 0) {
+                    r += xtoleft * xrow[source_column*BPP] / RATIO;
+                    g += xtoleft * xrow[1+source_column*BPP] / RATIO;
+                    b += xtoleft * xrow[2+source_column*BPP] / RATIO;
+                }
+                if (xrow[3+source_column*BPP] > a) {
+                    a = xrow[3+source_column*BPP];
+                }
+
+                xtofill -= xtoleft;
+            }
+            source_column++;
+        }
+
+        if (xtofill > 0 ) {
+            source_column--;
+            if (xrow[3+source_column*BPP] > 0) {
+                r += xtofill * xrow[source_column*BPP] / RATIO;
+                g += xtofill * xrow[1+source_column*BPP] / RATIO;
+                b += xtofill * xrow[2+source_column*BPP] / RATIO;
+            }
+            if (xrow[3+source_column*BPP] > a) {
+                a = xrow[3+source_column*BPP];
+            }
+        }
+
+        /* Not positve, but without the bound checking for dest_column,
+         * we were overrunning the buffer.  My guess is this only really
+         * showed up if when the images are being scaled - there is probably
+         * something like half a pixel left over.
+         */
+        if (!needcol && (dest_column < new_width)) {
+            nrows[destrow][dest_column * BPP] = r;
+            nrows[destrow][1+dest_column * BPP] = g;
+            nrows[destrow][2+dest_column * BPP] = b;
+            nrows[destrow][3+dest_column * BPP] = a;
+        }
+        destrow++;
+    }
+    *width = new_width;
+    *height = new_height;
+    return ndata;
+}
+
+//give pixmap_num and rgb data with width,height and output Cache_Entry* ce
+int create_and_rescale_image_from_data(Cache_Entry *ce, int pixmap_num, uint8 *rgba_data, int width, int height)
+{
+    int nx, ny, iscale, factor;
+    uint8 *png_tmp;
+    PixmapInfo  *pi;
+
+    if (pixmap_num <= 0 || pixmap_num >= MAXPIXMAPNUM) {
+        return 1;
+    }
+
+    if (pixmaps[pixmap_num] != pixmaps[0]) {
+            free_pixmap(pixmaps[pixmap_num]);
+            free(pixmaps[pixmap_num]);        
+        pixmaps[pixmap_num] = pixmaps[0];
+    }
+
+    pi = calloc(1, sizeof(PixmapInfo));
+    iscale = 100;
+  
+    if (width > DEFAULT_IMAGE_SIZE || height>DEFAULT_IMAGE_SIZE) {
+        int ts = 100;
+
+        factor = width / DEFAULT_IMAGE_SIZE;
+        if (factor >= MAX_ICON_SPACES) {
+            factor = MAX_ICON_SPACES - 1;
+        }
+        if (icon_rescale_factor[factor] < ts) {
+            ts = icon_rescale_factor[factor];
+        }
+
+        factor = height / DEFAULT_IMAGE_SIZE;
+        if (factor >= MAX_ICON_SPACES) {
+            factor = MAX_ICON_SPACES - 1;
+        }
+        if (icon_rescale_factor[factor] < ts) {
+            ts = icon_rescale_factor[factor];
+        }
+        printf("factor=%d\n",factor);
+        printf("iscale=%d\n",iscale);
+        iscale = ts * 100 / 100;
+    }
+
+    /* In all cases, the icon images are in native form. */
+    if (iscale != 100) {
+        nx=width;
+        ny=height;
+        png_tmp = rescale_rgba_data(rgba_data, &nx, &ny, iscale);
+        pi->icon_width = nx;
+        pi->icon_height = ny;
+        create_icon_image(png_tmp, pi, pixmap_num);
+        free(png_tmp);
+    } else {
+        pi->icon_width = width;
+        pi->icon_height = height;
+        create_icon_image(rgba_data, pi, pixmap_num);
+    }
+
+        pi->map_width = width;
+        pi->map_height = height;
+        png_tmp = rgba_data;
+        create_map_image(png_tmp, pi);
+
+    /*
+     * Not ideal, but if it is missing the map or icon image, presume something
+     * failed.  However, opengl doesn't set the map_image, so if using that
+     * display mode, don't make this check.
+     */
+    if (!pi->icon_image || (!pi->map_image)) {
+        free_pixmap(pi);
+        free(pi);
+        return 1;
+    }
+    if (ce) {
+        ce->image_data = pi;
+    }
+    pixmaps[pixmap_num] = pi;
+
+    return 0;
+}
+//
+void display_newpng(int face, uint8 *buf, int buflen, int setnum) {
+    uint8   *pngtmp;
+    uint32 width, height;
+    Cache_Entry *ce = NULL;
+
+    pngtmp = png_to_data(buf, buflen, &width, &height);
+    if (create_and_rescale_image_from_data(ce, face, pngtmp, width, height)) {
+        printf("create_and_rescale_image_from_data() error\n");
+    }
+    free(pngtmp);
+}
+
+// fill pixmaps[pnum]
+void Image2Cmd(uint8 *data,  int len) 
+{
+    //sizeof(uint8) = 1, sizeof(int) = 4
+    //pnum means face, which is image number
+    int pnum, plen;
+    uint8 setnum;
+    //pnum=data[0]*256^3 + data[0]*256^2 + data[1]*256+data[3]
+    pnum = GetInt_String(data);
+    setnum = data[4];
+    plen = GetInt_String(data + 5);
+    //pnum:0~3, setnum:4, plen:5~8
+    display_newpng(pnum, data + 9, plen, setnum);
+    printf("Fill pixmaps[%d] and len: %d\n", pnum, plen);
+}
+
+void reset_player_data() {
+    int i;
+
+    for (i = 0; i < MAX_SKILL; i++) {
+        cpl.stats.skill_exp[i] = 0;
+        cpl.stats.skill_level[i] = 0;
+    }
+}
+
+void PlayerCmd(unsigned char *data, int len)
+{
+    char name[MAX_BUF];
+    int tag, weight, face, i = 0, nlen;
+
+    reset_player_data();
+    tag = GetInt_String(data);
+    i += 4;
+    weight = GetInt_String(data+i);
+    i += 4;
+    face = GetInt_String(data+i);
+    i += 4;
+    nlen = data[i++];
+    memcpy(name, (const char*)data+i, nlen);
+    name[nlen] = '\0';
+    i += nlen;
+
+    if (i != len) {
+        //LOG(LOG_WARNING, "common::PlayerCmd", "lengths do not match (%d!=%d)", len, i);
+    }
+    printf("PlayerCmd: t[%d],w[%d],f[%d],n[%s]\n", tag,weight,face,name);
+    //new_player(tag, name, weight, face);
+}
+
+static void common_item_command(uint8 *data, int len)
+{
+
+    int weight, loc, tag, face, flags, pos = 0, nlen, anim, nrof, type;
+    uint8 animspeed;
+    char name[MAX_BUF];
+
+    loc = GetInt_String(data);
+    pos += 4;
+    printf("Item2Cmd: loc[%d],",loc);
+    if (pos == len) {
+        return;
+    } else if (loc < 0) { 
+        return;
+    } else {
+        while (pos < len) {
+            tag = GetInt_String(data+pos);
+            pos += 4;
+            flags = GetInt_String(data+pos);
+            pos += 4;
+            weight = GetInt_String(data+pos);
+            pos += 4;
+            face = GetInt_String(data+pos);
+            pos += 4;
+            nlen = data[pos++];
+            memcpy(name, (char*)data+pos, nlen);
+            pos += nlen;
+            name[nlen] = '\0';
+            anim = GetShort_String(data+pos);
+            pos += 2;
+            animspeed = data[pos++];
+            nrof = GetInt_String(data+pos);
+            pos += 4;
+            type = GetShort_String(data+pos);
+            pos += 2;
+            printf("tag[%d],flags[%d],weight[%d],face[%d],nlen[%d],name[%s],anim[%d],animspeed[%d],nrof[%d],type[%d]\n",
+                tag,flags,weight,face,nlen,name,anim,animspeed,nrof,type
+                );
+            //update_item(tag, loc, name, weight, face, flags, anim, animspeed, nrof, type);
+            //item_actions(locate_item(tag));
+        }
+        if (pos > len) {
+            
+        }
+    }
+}
+
+void Item2Cmd(unsigned char *data, int len)
+{
+    common_item_command(data, len);
+}
+
+void reset_map(void)
+{
+}
+
+void display_map_newmap(void)
+{
+    reset_map();
+}
+
+void mapdata_newmap(void)
+{
+    int x, y;
+
+    /* Clear the_map.cells[]. */
+    for (x = 0; x < FOG_MAP_SIZE; x++) {
+        CLEAR_CELLS(x, 0, FOG_MAP_SIZE);
+        for (y = 0; y < FOG_MAP_SIZE; y++) {
+            the_map.cells[x][y].need_update = 1;
+        }
+    }
+
+    /* Clear bigfaces[]. */
+  //  while (bigfaces_head != NULL) {
+  //      expand_clear_bigface_from_layer(bigfaces_head->x, bigfaces_head->y, bigfaces_head->layer, 0);
+  //  }
+
+    display_map_newmap();
+}
+
+
+void NewmapCmd(unsigned char *data, int len)
+{
+    (void)data; /* __UNUSED__ */
+    (void)len; /* __UNUSED__ */
+
+    mapdata_newmap();
+}
+
+
+
+void StatsCmd(unsigned char *data, int len)
+{
+    printf("StatsCmd: \n");
+    int i = 0, c, redraw = 0;
+    sint64 last_exp;
+     while (i < len) {
+        c = data[i++];
+        if (c >= CS_STAT_RESIST_START && c <= CS_STAT_RESIST_END) {
+            //c>100 and c<117
+            cpl.stats.resists[c-CS_STAT_RESIST_START] = GetShort_String(data+i);
+            printf("update resist: c[%d]<--%d\n",c,GetShort_String(data+i));
+            i += 2;
+            cpl.stats.resist_change = 1;
+        } else if (c >= CS_STAT_SKILLINFO && c < (CS_STAT_SKILLINFO+CS_NUM_SKILLS)) {
+            ////c >=140 and c < 140+
+            cpl.stats.skill_level[c-CS_STAT_SKILLINFO] = data[i++];
+            last_exp = cpl.stats.skill_exp[c-CS_STAT_SKILLINFO];
+            cpl.stats.skill_exp[c-CS_STAT_SKILLINFO] = GetInt64_String(data+i);
+             printf("update skill_exp: c[%d]<--%ld\n",c,GetInt64_String(data+i));
+            //
+            //use_skill(c-CS_STAT_SKILLINFO);
+            //
+            if (last_exp == 0 && cpl.stats.skill_exp[c-CS_STAT_SKILLINFO]) {
+                redraw = 1;
+            }
+            i += 8;
+        } else {
+            switch (c) {
+            case 1:
+                cpl.stats.hp = GetShort_String(data+i);
+                printf("update stat: c[%d]<--%d\n",c,GetShort_String(data+i));
+                i += 2;
+                break;
+            default:
+                printf("update stat: c[%d]<--%d\n",c,GetShort_String(data+i));
+                 i += 2;
+                break;
+            }
+        }
+
+    }
+    // draw_stats(redraw);
+    //draw_message_window(0);
+}
+
+
+void Map2Cmd(unsigned char *data, int len)
+{
+    printf("Map2Cmd: ");
+    int mask, x, y, pos = 0, space_len, value;
+    uint8 type;
+    //0xFFFF  0xFF
+    // mask   type
+    // mask got x,y
+    // 
+    //display_map_startupdate();
+    /* Not really using map1 protocol, but some draw logic differs from the
+     * original draw logic, and map2 is closest.
+     */
+    while (pos < len) {
+        // short = 2 bytes
+        // int = 4 bytes
+        mask = GetShort_String(data+pos);
+        printf("Mask[0x%X]",mask);
+        pos += 2;
+        // X/512 & (63) - 15
+        // X/8 & (63) - 15
+        // mask:
+        // xxxxxxxxxxxxxxx
+        // |  X |  Y  |  |
+        //
+        // (type:     [value]   [opt]   [opt]) , (), () ... 
+        // xxx1xxxx xxxxxxxx xxxxxxxx xxxxxxxx
+        // | |||_____layer:0~0xf, next 0xFF value
+        // ---|___1:set layer
+        //  |_space_len, 1: only type
+        //               2: type value
+        //               3: type value[bit15:1->Anim,0->smooth] opt[Anim or smooth]
+        //               4: type value                          opt[Anim] opt[smooth]
+        // xxx0xxxx
+        //     |__|
+        //      |___0x00: CLEAR
+        //          0x01: DARKNESS, next 0xFF:value
+        //
+        x = ((mask>>10)&0x3f)-MAP2_COORD_OFFSET;
+        y = ((mask>>4)&0x3f)-MAP2_COORD_OFFSET;
+        printf("->(%d,%d)",x,y);
+        /* This is a scroll then.  Go back and fetch another coordinate */
+        if (mask&0x1) {
+            //mapdata_scroll(x, y);
+            printf("\n");
+            continue;
+        }
+
+        if (x<0) {
+            //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got negative x!");
+            x = 0;
+        } else if (x >= MAX_VIEW) {
+            //X>=64
+            //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got x >= MAX_VIEW!");
+            x = MAX_VIEW - 1;
+        }
+
+        if (y<0) {
+            //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got negative y!");
+            y = 0;
+        } else if (y >= MAX_VIEW) {
+            //Y>=64
+            //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got y >= MAX_VIEW!");
+            y = MAX_VIEW - 1;
+        }
+        assert(0 <= x && x < MAX_VIEW);
+        assert(0 <= y && y < MAX_VIEW);
+        //mapdata_clear_old(x, y);
+        while (pos < len) {
+            type = data[pos++];
+            printf(" type[%d]",type);
+            /* type == 255 means nothing more for this space */
+            if (type == 255) {
+                //mapdata_set_check_space(x, y);
+                printf("\n");
+                break;
+            }
+            space_len = type>>5;
+            printf("->s_len[%d]",space_len);
+            type &= 0x1f;
+            if (type == MAP2_TYPE_CLEAR) {
+                //mapdata_clear_space(x, y);
+                printf("\n");
+                continue;
+            } else if (type == MAP2_TYPE_DARKNESS) {
+                value = data[pos++];
+                printf(" (DARKNESS)v[%d]",value);
+                //mapdata_set_darkness(x, y, value);
+                printf("\n");
+                continue;
+            } else if (type >= MAP2_LAYER_START && type < MAP2_LAYER_START+MAXLAYERS) {
+                int layer, opt;
+                layer = type&0xf;
+                printf("->(LAYER)layer[%d]",layer);
+                if (layer < 0) {
+                    //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got negative layer!");
+                    layer = 0;
+                } else if (layer >= MAXLAYERS) {
+                    //LOG(LOG_WARNING, "commands.c::Map2Cmd", "got layer >= MAXLAYERS!");
+                    layer = MAXLAYERS - 1;
+                }
+                assert(0 <= layer && layer < MAXLAYERS);
+                value = GetShort_String(data+pos);
+                printf(" v[%d]",value);
+                pos += 2;
+                if (!(value&FACE_IS_ANIM)) {
+                    //mapdata_set_face_layer(x, y, value, layer);
+                }
+                if (space_len > 2) {
+                    opt = data[pos++];
+                    printf(" o1[%d]",opt);
+                    if (value&FACE_IS_ANIM) {
+                        /* Animation speed */
+                        //mapdata_set_anim_layer(x, y, value, opt, layer);
+                    } else {
+                        /* Smooth info */
+                        //mapdata_set_smooth(x, y, opt, layer);
+                    }
+                }
+                /* Currently, if 4 bytes, must be a smooth byte */
+                if (space_len > 3) {
+                    opt = data[pos++];
+                    printf(" o2[%d]",opt);
+                    //mapdata_set_smooth(x, y, opt, layer);
+                }
+                printf("\n");
+                continue;
+
+            }
+
+
+        }
+    }
+     mapupdatesent = 0;
+    //display_map_doneupdate(FALSE, FALSE);
 }
 
 int SockList_ReadPacket(int fd, SockList *sl, int len)

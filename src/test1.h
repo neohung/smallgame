@@ -43,8 +43,11 @@ typedef unsigned char uint8;
 typedef signed char sint8;
 
 typedef struct PixmapInfo {
+    //icon_image should be (GdkPixbuf*)
     void        *icon_mask, *icon_image;
     uint16      icon_width, icon_height;
+    //map_image should be (GdkPixmap*)
+    //map_mask should be (GdkBitmap*)
     void        *map_mask, *map_image;
     uint16      map_width, map_height;
     void        *fog_image;
@@ -543,6 +546,12 @@ static GtkWidget *button_login, *button_create_account,
        *entry_account_name,
        *entry_account_password, *label_account_login_status;
 
+static GtkWidget *button_new_create_account, *button_new_cancel,
+       *entry_new_account_name,
+       *entry_new_account_password, *entry_new_confirm_password,
+       *label_create_account_status;
+
+
 GtkTextBuffer *textbuf_motd, *textbuf_news, *textbuf_rules_account,
               *textbuf_rules_char;
 
@@ -577,12 +586,27 @@ void FailureCmd(char *buf, int len);
 void VersionCmd(char *data, int len);
 void TickCmd(uint8 *data, int len);
 void ReplyInfoCmd(uint8 *buf, int len);
-
+void AccountPlayersCmd(char *buf, int len);
+void Image2Cmd(uint8 *data,  int len);
+void PlayerCmd(unsigned char *data, int len);
+void Item2Cmd(unsigned char *data, int len);
+void NewmapCmd(unsigned char *data, int len);
+void StatsCmd(unsigned char *data, int len);
+void Map2Cmd(unsigned char *data, int len);
 struct CmdMapping commands[] = {
     { "version",         (CmdProc)VersionCmd, ASCII },
     { "replyinfo",       ReplyInfoCmd, ASCII},
     { "setup",           (CmdProc)SetupCmd, ASCII},
     { "failure",         (CmdProc)FailureCmd, ASCII},
+    { "accountplayers",  (CmdProc)AccountPlayersCmd, ASCII},
+     { "image2",          Image2Cmd, MIXED       },
+     { "player",          PlayerCmd, MIXED       },
+      { "item2",           Item2Cmd, MIXED },
+       { "newmap",          NewmapCmd, NODATA },
+        {
+        "stats",           StatsCmd, STATS      //update player stats 
+    },
+    { "map2",            Map2Cmd, SHORT_ARRAY },
     /*
     { "map2",            Map2Cmd, SHORT_ARRAY },
     { "map_scroll",      (CmdProc)map_scrollCmd, ASCII },
@@ -644,3 +668,77 @@ struct CmdMapping commands[] = {
 
 #define RI_IMAGE_INFO 0x1
 #define RI_IMAGE_SUMS 0x2
+
+gint csocket_fd;
+
+struct timeval timeout;
+
+void DoClient(ClientSocket *csocket);
+
+GtkListStore    *character_store;
+
+
+static GtkWidget *button_play_character, *button_create_character,
+       *button_add_character, *button_return_login, *button_account_password,
+       *treeview_choose_character;
+
+static GtkWidget *entry_new_character_name, *new_character_window,
+       *label_new_char_status, *button_create_new_char,
+       *button_new_char_cancel;
+
+#define NUM_NEW_CHAR_STATS  7
+#define NUM_OPT_FIELDS  6
+static GtkWidget *spinbutton_cc[NUM_NEW_CHAR_STATS], *label_rs[NUM_NEW_CHAR_STATS],
+       *label_cs[NUM_NEW_CHAR_STATS], *label_tot[NUM_NEW_CHAR_STATS],
+       *label_cc_unspent, *textview_rs_desc, *label_cc_desc, *label_cc_status_update,
+       *button_cc_cancel, *button_cc_done, *create_character_window, *combobox_rs,
+       *combobox_cs, *textview_cs_desc, *entry_new_character_name, *button_choose_starting_map,
+       *opt_label[NUM_OPT_FIELDS], *opt_combobox[NUM_OPT_FIELDS];
+
+#define PNGX_NOFILE     1
+#define PNGX_OUTOFMEM   2
+#define PNGX_DATA       3
+
+static uint8 *data_cp;
+static int data_len, data_start;
+
+#define MAX_ICON_SPACES     10
+static const int icon_rescale_factor[MAX_ICON_SPACES] = {
+    100, 100,           80 /* 2 = 160 */,   60 /* 3 = 180 */,
+    50 /* 4 = 200 */,   45 /* 5 = 225 */,   40 /* 6 = 240 */,
+    35 /* 7 = 259 */,   35 /* 8 = 280 */,   33 /* 9 = 300 */
+};
+
+
+#define DEFAULT_IMAGE_SIZE      32
+#define RATIO   100
+
+#define MAX_IMAGE_WIDTH         1024
+#define MAX_IMAGE_HEIGHT        1024
+#define BPP 4
+#define NAME_LEN    128
+#define copy_name(t,f) strncpy(t, f, NAME_LEN-1); t[NAME_LEN-1]=0;
+#define CS_STAT_RESIST_START      100 /**< Start of resistances (inclusive) */
+#define CS_STAT_RESIST_END        117 /**< End of resistances (inclusive)   */
+#define CS_STAT_SKILLINFO         140
+#define CS_NUM_SKILLS              50
+void Map2Cmd(unsigned char *data, int len);
+#define MAX_VIEW 64
+#define MAP2_COORD_OFFSET   15
+
+#define MAP2_TYPE_CLEAR         0x0
+#define MAP2_TYPE_DARKNESS      0x1
+
+#define MAP2_LAYER_START        0x10
+#define MAXLAYERS 10
+#define MAP1_LAYERS 3
+
+#define FACE_IS_ANIM    1<<15
+#define ANIM_RANDOM     1<<13
+#define ANIM_SYNC       2<<13
+
+#define ANIM_FLAGS_MASK 0x6000 
+
+#define ANIM_MASK       0x1fff
+
+int mapupdatesent = 0;
