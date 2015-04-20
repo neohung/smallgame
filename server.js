@@ -3,6 +3,8 @@ fs = require("fs");
 util = require("util");
 mime = require("mime");
 path = require('path'); 
+crypto = require('crypto');
+md5 = crypto.createHash('md5');
 
 var pngcmd = function pngfun(ws,data){
 	console.log("pngcmd");
@@ -26,6 +28,63 @@ var pngcmd = function pngfun(ws,data){
 	ws.send('$'+data[0]+" "+dataUri, { binary: false });
 }
 
+
+var pngbcmd = function pngfun(ws,data){
+  console.log("pngbcmd");
+  /*
+  var dataUri;
+  var img = {};
+  if (data.length == 1){
+   //dataUri = base64Image("./src/res/iXiangQi_55x55/bpawn.png");
+    img.data = fs.readFileSync("./src/res/iXiangQi_55x55/bpawn.png");
+    md5.update(img.data);
+    img.sum = md5.digest('hex');
+    console.log(img.sum+ ' ' + "./src/res/iXiangQi_55x55/bpawn.png");
+
+  }else{
+
+    fs.stat(data[1], function(err, stat) {
+          if(err == null) {
+              console.log("Send binary file");
+              img.data = fs.readFileSync(data[1]);
+              md5.update(img.data);
+              img.sum = md5.digest('hex');
+              //crypto.createHash('md5').update(img.data).digest("hex");
+              console.log(img.sum+ ' ' + data[1]);
+              //dataUri = base64Image(data[1]);
+          } else {
+              console.log('pngcmd open file error: ', err.code);
+        ws.send('Cannot find '+ data[1], { binary: false });
+        return  
+          }
+    });
+
+  }
+  //ws.send(data[1], { binary: false });
+  //ws.send('$'+data[0]+" "+img.sum, { binary: false });
+  //ws.send(data[0]+" "+img.sum, { binary: false });
+  //ws.send('$'+data[0]+" "+img, { binary: true });
+  */
+  
+ var a = 'neo';
+ var buf = new ArrayBuffer(2+a.length+1);
+ var bytearray = new Uint8Array(buf);
+ bytearray[0] = '$'.charCodeAt(0);
+ bytearray[1] = '$'.charCodeAt(0);
+  bytearray[2+0] = a.charCodeAt(0);
+  bytearray[2+1] = a.charCodeAt(1);
+  bytearray[2+2] = a.charCodeAt(2);
+  bytearray[2+3] = a.charCodeAt(3);
+  //ws.binaryType = "arraybuffer";
+  ws.send(bytearray, { binary: true, mask: false });
+  var string_buf = new Buffer(bytearray.byteLength);
+  for (var i=0; i<bytearray.byteLength; i++) {
+    //myString += String.fromCharCode(bytearray[i])
+    string_buf[i] = bytearray[i];
+  }
+  console.log("Send: "+ string_buf);
+}
+
 var abccmd = function abcfun(ws,data){
         console.log("abccmd");
 	var send_data = '$'+data[0];
@@ -43,9 +102,26 @@ function base64Image(src) {
     return data;
 }
 
+function ArrayBufferAddStr(arraybuffer,str){
+
+}
+
+function ArrayBufferAddInt8(arraybuffer,int8){
+
+}
+
+function ArrayBufferAddInt16(arraybuffer,int16){
+
+}
+
+function ArrayBufferAddInt32(arraybuffer,int32){
+
+}
+
 var cmdlist = [
     { name: 'png', callback: pngcmd }
   , { name: 'abc', callback: abccmd }
+  , { name: 'pngb', callback: pngbcmd }
 ];
 //cmdlist.push( { name: 'png', callback:'' } )
 

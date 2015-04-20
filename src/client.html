@@ -14,6 +14,18 @@
 			image.src = 'data:image/png;base64,' + data[1];
 			document.body.appendChild(image);
 		}
+        var pngbcmd = function pngfun(ws,data){
+            //   console.log("got pngbcmd");
+            //var image = new Image();
+            //image.src = 'data:image/png;base64,' + data[1];
+            $('div').append($('<p>', { text: "Len: "+data.byteLength }));
+            var myString = '';
+            document.body.appendChild();
+            for (var i=0; i<data.byteLength; i++) {
+                myString += String.fromCharCode(data[i])
+            }
+            $('div').append($('<p>', { text: "Str: "+myString }));
+        }
 
 		var abccmd = function abcfun(ws,data){
         		console.log("got abccmd");
@@ -26,31 +38,36 @@
 		var cmdlist = [
    		    { name: 'png', callback: pngcmd }
 		  , { name: 'abc', callback: abccmd }
+          , { name: 'pngb', callback: pngbcmd }
 		];
-            $(function() {
+        $(function() {
+
                 window.WebSocket = window.WebSocket || window.MozWebSocket;
 
                 <!--var websocket = new WebSocket('ws://websockettest-smallgame.rhcloud.com:8000');-->
                 var websocket = new WebSocket('ws://localhost:8000');
+                websocket.binaryType = 'arraybuffer';
 		var mytimer = setInterval(function () {printTime()}, 1000);
                 $('div').append($('<p>', { text: "connecting" }));
                 websocket.onopen = function () {
-		    clearInterval(mytimer);
+		        clearInterval(mytimer);
                     $('h1').css('color', 'green');
                     $('div').append($('<p>', { text: "connect success." }));
                 };
 
                 websocket.onerror = function () {
-		    clearInterval(mytimer);
+		        clearInterval(mytimer);
                     $('h1').css('color', 'red');
                     $('div').append($('<p>', { text: "connect fail!!!" }));
                 };
 
                 websocket.onmessage = function (message) {
+                    $('div').append($('<p>', { text: "got message" }));
                     //console.log(message.data);
-		    if (message.data[0] == '$')
-           	    {
-			var not_in_cmdlist=1;
+                    /*
+		          if (message.data[0] == '$')
+           	        {
+			         var not_in_cmdlist=1;
                 	str = message.data.substring(1, message.data.length);
                 	var data_arr = str.toString().split(" ");
                 	for(var i = 0; i < cmdlist.length;i++)
@@ -66,6 +83,23 @@
 		    }else{
                     	$('div').append($('<p>', { text: message.data }));
 			}
+            */
+                 
+                    //wa.forEach(function(other) {
+                    //    if(conn === other) return;
+                    //        other.sendBytes(line);
+                    //});
+
+                    //var bytearray = new Uint8Array(message.data);
+                     $('div').append($('<p>', { text: "Len: "+message.data.byteLength}));
+                      var string_buf = String.fromCharCode.apply(null, new Uint8Array(message.data));
+                     
+                       // var myString = '';
+                        //document.body.appendChild();
+                       // for (var i=0; i<message.byteLength; i++) {
+                        //    myString += String.fromCharCode(message[i])
+                       // }
+                     $('div').append($('<p>', { text: "Str: " + string_buf}));
                 };
                 
 
